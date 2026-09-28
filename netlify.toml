@@ -1,0 +1,14 @@
+# Netlify: build the Angular app in its subfolder and serve it as a single-page app.
+[build]
+  base = "src/app-medinous-report-builder-master"
+  command = "npm run build"
+  publish = "dist/report-builder-ui/browser"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Deep links like /reports/rpt-daily-collection or /schedules must load index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
