@@ -1,0 +1,901 @@
+<main class="fx-main">
+    @if (view() === 'builder') {
+      <!-- ============ Report context strip ============ -->
+      <section class="fx-context" (change)="onPanelEvent($event)">
+        @if (drillThroughStack().length > 0) {
+          <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="drillThroughBack()">
+            <mat-icon>arrow_back</mat-icon>
+            {{ drillThroughStack()[drillThroughStack().length - 1].reportName }}
+          </button>
+        }
+        <div class="fx-ctx-title">
+          <input class="fx-title-input" placeholder="Report Title"
+                 [ngModel]="reportTitle()" (ngModelChange)="reportTitle.set($event); dirty.set(true)" aria-label="Report title" />
+          <span class="fx-ctx-sub">
+            @if (currentReportId()) {
+              <mat-icon class="tiny">bookmark</mat-icon> {{ currentReportName() }}
+            } @else {
+              New report
+            }
+          </span>
+        </div>
+        @if (selectedEntityId()) {
+          <div class="fx-ctx-meta">
+            <span><small>Module</small><b>{{ moduleName(selectedModuleId()) }}</b></span>
+            <span><small>Entity</small><b>{{ entityName() }}</b></span>
+            <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="startNewReport()" matTooltip="Start a new report on another module or entity">Change</button>
+          </div>
+        }
+      </section>
+
+      <div class="fx-workspace">
+        <!-- ============ Configuration panel ============ -->
+        <aside class="fx-config" (change)="onPanelEvent($event)" (click)="onPanelEvent($event)">
+          @if (!selectedEntityId()) {
+            <div class="fx-config-empty">
+              <mat-icon class="big">dataset</mat-icon>
+              <p>Select a <b>module</b> and <b>entity</b> to start a report.</p>
+              <div class="fx-empty-actions">
+                <button class="fx-btn fx-btn-primary" (click)="startNewReport()"><mat-icon>add</mat-icon> New Report</button>
+                <button class="fx-btn fx-btn-secondary" (click)="openLibrary('reports')"><mat-icon>folder_open</mat-icon> Load Report</button>
+              </div>
+            </div>
+          } @else {
+            <!-- Columns -->
+            <div class="fx-section">
+              <button class="fx-band" (click)="toggleSection('columns')" [attr.aria-expanded]="isOpen('columns')">
+                <mat-icon class="chev">{{ isOpen('columns') ? 'expand_more' : 'chevron_right' }}</mat-icon>
+                <h6>Fields</h6>
+                <span class="fx-band-sum">{{ selectedFields().length }} selected
+                  @if (hasGroupings()) { · grouped }</span>
+              </button>
+              @if (isOpen('columns')) {
+                <div class="fx-section-body">
+                  @if (selectedFields().length || joins().length) {
+                    <div class="fx-chosen-cap">Column order <span>drag to rearrange</span></div>
+                    <div class="fx-chosen" aria-label="Selected fields, in column order"
+                         cdkDropList cdkDropListOrientation="mixed" (cdkDropListDropped)="dropColumn($event)">
+                      @for (fs of selectedFields(); track fs.field.fieldId; let i = $index) {
+                        <span class="fx-chip draggable" cdkDrag tabindex="0" (keydown)="onChipKey($event, i)"
+                              [attr.aria-label]="(i + 1) + '. ' + columnLabel(fs) + ' — use left and right arrow keys to move'">
+                          <mat-icon class="grip">drag_indicator</mat-icon>
+                          @if (fs.grouped) { <mat-icon matTooltip="Grouped">workspaces</mat-icon> }
+                          {{ columnLabel(fs) }}
+                          <button (click)="toggleFieldSelected(fs.field.fieldId)" (mousedown)="$event.stopPropagation()" [attr.aria-label]="'Remove ' + fs.field.displayLabel"><mat-icon>close</mat-icon></button>
+                        </span>
+                      }
+                      @for (j of joins(); track j.relationship.relationshipId; let ji = $index) {
+                        @for (fid of j.selectedFieldIds; track fid) {
+                          <span class="fx-chip">
+                            <mat-icon>link</mat-icon>{{ getFieldLabel(fid) }}
+                            <button (click)="toggleJoinField(ji, fid)" aria-label="Remove"><mat-icon>close</mat-icon></button>
+                          </span>
+                        }
+                      }
+                    </div>
+                  }
+                  <div class="fx-search">
+                    <mat-icon>search</mat-icon>
+                    <input placeholder="Search fields" [ngModel]="fieldSearch()" (ngModelChange)="fieldSearch.set($event)" />
+                  </div>
+
+                  <div class="fx-field-list" role="group" aria-label="Available fields">
+                    @for (fs of visibleFields(); track fs.field.fieldId) {
+                    <div class="fx-field" [class.on]="fs.selected">
+                      <label class="fx-check">
+                        <input type="checkbox" [checked]="fs.selected" (change)="toggleFieldSelected(fs.field.fieldId)" />
+                        <span [matTooltip]="fs.field.description || ''">{{ fs.field.displayLabel }}</span>
+                        @if (fs.field.isComputed) {
+                          <mat-icon class="tiny muted" matTooltip="Calculated column">functions</mat-icon>
+                        }
+                        <span class="fx-type">{{ fs.field.dataType }}</span>
+                      </label>
+                      @if (fs.selected) {
+                        <div class="fx-field-opts">
+                          @if (fs.field.allowedAggregations.length > 0) {
+                            <select [ngModel]="fs.aggregate" (ngModelChange)="setFieldAggregate(fs.field.fieldId, $event)" aria-label="Summarise">
+                              @for (agg of AGGREGATION_OPTIONS; track agg.value) {
+                                @if (!agg.value || fs.field.allowedAggregations.includes(agg.value)) {
+                                  <option [ngValue]="agg.value">{{ agg.label }}</option>
+                                }
+                              }
+                            </select>
+                          }
+                          @if (fs.field.dataType === 'Number' || fs.field.dataType === 'Date') {
+                            <select [ngModel]="fs.formatPattern" (ngModelChange)="setFieldFormatPattern(fs.field.fieldId, $event)" aria-label="Format">
+                              @for (fmt of getFormatOptionsForField(fs.field.dataType); track fmt.value) {
+                                <option [ngValue]="fmt.value">{{ fmt.label }}</option>
+                              }
+                            </select>
+                          }
+                          @if (fs.field.isGroupable) {
+                            <label class="fx-check inline">
+                              <input type="checkbox" [checked]="fs.grouped" (change)="toggleFieldGrouped(fs.field.fieldId)" />
+                              Group
+                            </label>
+                          }
+                        </div>
+                      }
+                    </div>
+                    } @empty {
+                      <p class="fx-hint center">No fields match “{{ fieldSearch() }}”.</p>
+                    }
+                  </div>
+
+                  <!-- Related data (joins) -->
+                  @if (relationships().length > 0) {
+                    <div class="fx-sub">Joins</div>
+                    @for (join of joins(); track join.relationship.relationshipId; let i = $index) {
+                      <div class="fx-join">
+                        <div class="fx-join-head">
+                          <mat-icon class="tiny">link</mat-icon>
+                          <b>{{ join.entity.entityName }}</b>
+                          <select [(ngModel)]="join.joinType" aria-label="Join type">
+                            <option value="left">LEFT JOIN</option>
+                            <option value="inner">INNER JOIN</option>
+                            <option value="right">RIGHT JOIN</option>
+                          </select>
+                          <button class="fx-icon-btn sm" (click)="removeJoin(i)" matTooltip="Remove join">
+                            <mat-icon>close</mat-icon>
+                          </button>
+                        </div>
+                        <div class="fx-join-fields">
+                          @for (f of join.fields; track f.fieldId) {
+                            <label class="fx-check">
+                              <input type="checkbox" [checked]="join.selectedFieldIds.includes(f.fieldId)" (change)="toggleJoinField(i, f.fieldId)" />
+                              {{ f.displayLabel }}
+                            </label>
+                          }
+                        </div>
+                      </div>
+                    }
+                    @if (availableRelationships().length > 0) {
+                      <select class="fx-add-select" (change)="addJoinById($any($event.target).value); $any($event.target).value = ''">
+                        <option value="">Add Join...</option>
+                        @for (r of availableRelationships(); track r.relationshipId) {
+                          <option [value]="r.relationshipId">{{ r.primaryEntityName }} &#8596; {{ r.foreignEntityName }} ({{ r.primaryJoinField }} = {{ r.foreignJoinField }})</option>
+                        }
+                      </select>
+                    }
+                  }
+                </div>
+              }
+            </div>
+
+            <!-- Filters -->
+            <div class="fx-section">
+              <button class="fx-band" (click)="toggleSection('filters')" [attr.aria-expanded]="isOpen('filters')">
+                <mat-icon class="chev">{{ isOpen('filters') ? 'expand_more' : 'chevron_right' }}</mat-icon>
+                <h6>Filters</h6>
+                <span class="fx-band-sum">{{ filterSummary() }}</span>
+              </button>
+              @if (isOpen('filters')) {
+                <div class="fx-section-body">
+                  @if (filters().length > 1) {
+                    <div class="fx-seg" role="group" aria-label="Logic">
+                      <button [class.on]="filterLogic() === 'and'" (click)="filterLogic.set('and')">AND</button>
+                      <button [class.on]="filterLogic() === 'or'" (click)="filterLogic.set('or')">OR</button>
+                    </div>
+                  }
+                  @for (filter of filters(); track $index; let i = $index) {
+                    <div class="fx-rule">
+                      <select class="w-field" [(ngModel)]="filter.fieldId" aria-label="Field">
+                        @for (f of filterableFields(); track f.fieldId) {
+                          <option [ngValue]="f.fieldId">{{ f.displayLabel }}</option>
+                        }
+                        @for (j of joins(); track j.relationship.relationshipId) {
+                          <optgroup [label]="j.entity.entityName">
+                            @for (f of j.fields; track f.fieldId) {
+                              @if (f.isFilterable) {
+                                <option [ngValue]="f.fieldId">{{ f.displayLabel }}</option>
+                              }
+                            }
+                          </optgroup>
+                        }
+                      </select>
+                      <select class="w-op" [(ngModel)]="filter.operator" aria-label="Operator">
+                        @for (op of getOperatorsForField(filter.fieldId); track op.value) {
+                          <option [ngValue]="op.value">{{ op.label }}</option>
+                        }
+                      </select>
+                      @if (filter.operator === 'relative') {
+                        <select class="w-val" [(ngModel)]="filter.value" aria-label="Period">
+                          @for (preset of RELATIVE_DATE_PRESETS; track preset.label) {
+                            <option [ngValue]="preset.label">{{ preset.label }}</option>
+                          }
+                        </select>
+                      } @else if (filter.operator !== 'isnull' && filter.operator !== 'isnotnull') {
+                        <input class="w-val" [(ngModel)]="filter.value"
+                               [placeholder]="filter.operator === 'between' ? 'From, To' : filter.operator === 'in' ? 'A, B, C' : 'Value'" />
+                      } @else {
+                        <span class="w-val"></span>
+                      }
+                      <button class="fx-icon-btn sm" (click)="removeFilter(i)" matTooltip="Remove filter"><mat-icon>close</mat-icon></button>
+                    </div>
+                  }
+                  <button class="fx-link" (click)="addFilter()" [disabled]="filterableFields().length === 0">
+                    <mat-icon>add</mat-icon> Add Filter
+                  </button>
+
+                  @if (hasGroupings() && aggregatedFields().length > 0) {
+                    <div class="fx-sub">Having Filters
+                      <span class="fx-hint-inline">Post-aggregation conditions</span>
+                    </div>
+                    @if (havingFilters().length > 1) {
+                      <div class="fx-seg">
+                        <button [class.on]="havingLogic() === 'and'" (click)="havingLogic.set('and')">AND</button>
+                        <button [class.on]="havingLogic() === 'or'" (click)="havingLogic.set('or')">OR</button>
+                      </div>
+                    }
+                    @for (hf of havingFilters(); track $index; let i = $index) {
+                      <div class="fx-rule">
+                        <select class="w-field" [(ngModel)]="hf.fieldId">
+                          @for (f of aggregatedFields(); track f.fieldId) {
+                            <option [ngValue]="f.fieldId">{{ f.displayLabel }}</option>
+                          }
+                        </select>
+                        <select class="w-op" [(ngModel)]="hf.operator">
+                          <option value="gt">Greater Than</option>
+                          <option value="gte">Greater or Equal</option>
+                          <option value="lt">Less Than</option>
+                          <option value="lte">Less or Equal</option>
+                          <option value="eq">Equals</option>
+                          <option value="neq">Not Equals</option>
+                          <option value="between">Between</option>
+                        </select>
+                        <input class="w-val" [(ngModel)]="hf.value" placeholder="Value" />
+                        <button class="fx-icon-btn sm" (click)="removeHavingFilter(i)"><mat-icon>close</mat-icon></button>
+                      </div>
+                    }
+                    <button class="fx-link" (click)="addHavingFilter()"><mat-icon>add</mat-icon> Add Having Filter</button>
+                  }
+                </div>
+              }
+            </div>
+
+            <!-- Sort & limit -->
+            <div class="fx-section">
+              <button class="fx-band" (click)="toggleSection('sort')" [attr.aria-expanded]="isOpen('sort')">
+                <mat-icon class="chev">{{ isOpen('sort') ? 'expand_more' : 'chevron_right' }}</mat-icon>
+                <h6>Sorting &amp; Query Options</h6>
+                <span class="fx-band-sum">{{ sortSummary() }}</span>
+              </button>
+              @if (isOpen('sort')) {
+                <div class="fx-section-body">
+                  @for (sort of sortings(); track $index; let i = $index) {
+                    <div class="fx-rule">
+                      <select class="w-field" [(ngModel)]="sort.fieldId">
+                        @for (f of sortableFields(); track f.fieldId) {
+                          <option [ngValue]="f.fieldId">{{ f.displayLabel }}</option>
+                        }
+                      </select>
+                      <div class="fx-seg sm">
+                        <button [class.on]="sort.direction === 'ASC'" (click)="sort.direction = 'ASC'; sortings.set([...sortings()])">ASC</button>
+                        <button [class.on]="sort.direction === 'DESC'" (click)="sort.direction = 'DESC'; sortings.set([...sortings()])">DESC</button>
+                      </div>
+                      <button class="fx-icon-btn sm" (click)="removeSorting(i)"><mat-icon>close</mat-icon></button>
+                    </div>
+                  }
+                  <button class="fx-link" (click)="addSorting()" [disabled]="sortableFields().length === 0"
+                          [matTooltip]="sortableFields().length === 0 ? 'Select a field first' : ''">
+                    <mat-icon>add</mat-icon> Add Sort
+                  </button>
+
+                  <div class="fx-sub">Query Options</div>
+                  <label class="fx-check">
+                    <input type="checkbox" [checked]="distinctEnabled()" (change)="distinctEnabled.set(!distinctEnabled())" />
+                    Distinct results only
+                  </label>
+                  <label class="fx-check">
+                    <input type="checkbox" [checked]="topNEnabled()" (change)="topNEnabled.set(!topNEnabled())" />
+                    Top-N / Bottom-N
+                  </label>
+                  @if (topNEnabled()) {
+                    <div class="fx-rule indent">
+                      <select class="w-op" [ngModel]="topNDirection()" (ngModelChange)="topNDirection.set($event)">
+                        <option value="top">Top (highest)</option>
+                        <option value="bottom">Bottom (lowest)</option>
+                      </select>
+                      <input class="w-num" type="number" min="1" max="1000" [ngModel]="topNCount()" (ngModelChange)="topNCount.set($event)" aria-label="Rows" />
+                      <span class="fx-by">by</span>
+                      <select class="w-field" [ngModel]="topNFieldId()" (ngModelChange)="topNFieldId.set($event)">
+                        <option [ngValue]="null" disabled>By Field</option>
+                        @for (f of selectedFields(); track f.field.fieldId) {
+                          <option [ngValue]="f.field.fieldId">{{ f.field.displayLabel }}</option>
+                        }
+                      </select>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+
+            <!-- Run-time prompts -->
+            <div class="fx-section">
+              <button class="fx-band" (click)="toggleSection('params')" [attr.aria-expanded]="isOpen('params')">
+                <mat-icon class="chev">{{ isOpen('params') ? 'expand_more' : 'chevron_right' }}</mat-icon>
+                <h6>Parameters</h6>
+                <span class="fx-band-sum">{{ parameters().length }} defined</span>
+              </button>
+              @if (isOpen('params')) {
+                <div class="fx-section-body">
+                  <p class="fx-hint">Use <code>&#64;paramId</code> as a filter value to reference parameters.</p>
+                  @if (parameters().length) {
+                    <div class="fx-param-head"><span>ID</span><span>Label</span><span>Type</span><span>Default</span><span></span></div>
+                  }
+                  @for (param of parameters(); track $index; let i = $index) {
+                    <div class="fx-param">
+                      <input [ngModel]="param.paramId" (ngModelChange)="updateParameter(i, 'paramId', $event)" aria-label="ID" />
+                      <input [ngModel]="param.label" (ngModelChange)="updateParameter(i, 'label', $event)" aria-label="Label" />
+                      <select [ngModel]="param.dataType" (ngModelChange)="updateParameter(i, 'dataType', $event)" aria-label="Type">
+                        <option value="String">String</option>
+                        <option value="Number">Number</option>
+                        <option value="Date">Date</option>
+                        <option value="Boolean">Boolean</option>
+                      </select>
+                      <input [ngModel]="param.defaultValue" (ngModelChange)="updateParameter(i, 'defaultValue', $event)" aria-label="Default" />
+                      <button class="fx-icon-btn sm" (click)="removeParameter(i)"><mat-icon>close</mat-icon></button>
+                    </div>
+                    @if (param.dataType === 'String' || param.dataType === 'Number') {
+                      <div class="fx-param-src">
+                        <span>Values from field</span>
+                        <select [ngModel]="param.entityFieldId ?? null" (ngModelChange)="updateParameter(i, 'entityFieldId', $event ?? undefined)"
+                                aria-label="Show a dropdown of this field's values when the report is run">
+                          <option [ngValue]="null">None (typed in)</option>
+                          @for (f of filterableFields(); track f.fieldId) { <option [ngValue]="f.fieldId">{{ f.displayLabel }}</option> }
+                          @for (j of joins(); track j.relationship.relationshipId) {
+                            <optgroup [label]="j.entity.entityName">
+                              @for (f of j.fields; track f.fieldId) { <option [ngValue]="f.fieldId">{{ f.displayLabel }}</option> }
+                            </optgroup>
+                          }
+                        </select>
+                      </div>
+                    }
+                  }
+                  <div class="fx-inline-actions">
+                    <button class="fx-link" (click)="addParameter()"><mat-icon>add</mat-icon> Add Parameter</button>
+                    @if (dateFields().length) {
+                      <select class="fx-add-select fx-add-range" (change)="addDateRange($any($event.target).value); $any($event.target).value = ''"
+                              aria-label="Add a date range parameter">
+                        <option value="">+ Add date range on…</option>
+                        @for (f of dateFields(); track f.fieldId) { <option [value]="f.fieldId">{{ f.displayLabel }}</option> }
+                      </select>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+
+            <!-- Presentation -->
+            <div class="fx-section">
+              <button class="fx-band" (click)="toggleSection('layout')" [attr.aria-expanded]="isOpen('layout')">
+                <mat-icon class="chev">{{ isOpen('layout') ? 'expand_more' : 'chevron_right' }}</mat-icon>
+                <h6>Layout</h6>
+                <span class="fx-band-sum">
+                  {{ dashboardEnabled() ? 'Dashboard · ' + dashboardWidgets().length + ' widgets' : layoutType() === 'ChartAndTable' ? 'Chart + table' : layoutType() }} · {{ orientation() }}
+                </span>
+              </button>
+              @if (isOpen('layout')) {
+                <div class="fx-section-body">
+                  <div class="fx-row">
+                    <span class="fx-label">Layout</span>
+                    <div class="fx-seg">
+                      <button [class.on]="layoutType() === 'Table'" (click)="setLayout('Table')"><mat-icon>table_rows</mat-icon>Table</button>
+                      <button [class.on]="layoutType() === 'Chart'" (click)="setLayout('Chart')"><mat-icon>bar_chart</mat-icon>Chart</button>
+                      <button [class.on]="layoutType() === 'ChartAndTable'" (click)="setLayout('ChartAndTable')"><mat-icon>space_dashboard</mat-icon>Both</button>
+                    </div>
+                  </div>
+                  <div class="fx-row">
+                    <span class="fx-label">PDF Orientation</span>
+                    <div class="fx-seg">
+                      <button [class.on]="orientation() === 'Portrait'" (click)="orientation.set('Portrait')">Portrait</button>
+                      <button [class.on]="orientation() === 'Landscape'" (click)="orientation.set('Landscape')">Landscape</button>
+                    </div>
+                  </div>
+
+                  @if (layoutType() !== 'Table') {
+                    <div class="fx-sub">Chart Settings</div>
+                    <div class="fx-chart-types">
+                      @for (ct of CHART_TYPES; track ct.value) {
+                        <button [class.on]="chartType() === ct.value" (click)="chartType.set(ct.value)">
+                          <mat-icon>{{ ct.icon }}</mat-icon>{{ ct.label }}
+                        </button>
+                      }
+                    </div>
+                    @if (previewResult() && previewResult()!.data.length > 0) {
+                      <div class="fx-row">
+                        <span class="fx-label">Label Field (X-Axis)</span>
+                        <select class="grow" [ngModel]="chartLabelField()" (ngModelChange)="chartLabelField.set($event)">
+                          <option value="" disabled>Label Field</option>
+                          @for (col of previewColumns(); track col) {
+                            <option [value]="col">{{ col }}</option>
+                          }
+                        </select>
+                      </div>
+                      <div class="fx-row top">
+                        <span class="fx-label">Data Fields (Y-Axis)</span>
+                        <div class="fx-checklist">
+                          @for (col of numericColumns(); track col) {
+                            <label class="fx-check">
+                              <input type="checkbox" [checked]="chartDataFields().includes(col)" (change)="toggleChartDataField(col)" /> {{ col }}
+                            </label>
+                          }
+                          @if (numericColumns().length === 0) {
+                            <span class="fx-hint">No numeric columns available. Run a preview with numeric fields first.</span>
+                          }
+                        </div>
+                      </div>
+                    } @else {
+                      <p class="fx-hint">Run a preview first to configure chart fields.</p>
+                    }
+                  }
+
+                  @if (previewResult() && previewResult()!.data.length > 0) {
+                    <div class="fx-sub">Dashboard Layout</div>
+                    <label class="fx-check">
+                      <input type="checkbox" [checked]="dashboardEnabled()" (change)="dashboardEnabled.set(!dashboardEnabled())" />
+                      Enable dashboard grid
+                    </label>
+                    @if (dashboardEnabled()) {
+                      <div class="fx-row">
+                        <span class="fx-label">Grid Columns</span>
+                        <select [ngModel]="dashboardColumns()" (ngModelChange)="dashboardColumns.set($event)">
+                          @for (n of [1, 2, 3, 4]; track n) { <option [ngValue]="n">{{ n }}</option> }
+                        </select>
+                      </div>
+                      @for (widget of dashboardWidgets(); track widget.id; let i = $index) {
+                        <div class="fx-widget">
+                          <div class="fx-rule">
+                            <input class="w-field" [value]="widget.title" (input)="updateDashboardWidget(widget.id, 'title', $any($event.target).value)" aria-label="Widget title" />
+                            <select class="w-op" [ngModel]="widget.type" (ngModelChange)="updateDashboardWidget(widget.id, 'type', $event)">
+                              <option value="Grid">Table</option>
+                              <option value="Bar">Bar</option>
+                              <option value="Line">Line</option>
+                              <option value="Pie">Pie</option>
+                              <option value="Doughnut">Donut</option>
+                            </select>
+                            <select class="w-num" [ngModel]="dashboardLayout()[i]?.colSpan || 1" (ngModelChange)="updateLayoutItem(widget.id, 'colSpan', $event)" matTooltip="Width in columns">
+                              @for (s of [1, 2, 3, 4]; track s) {
+                                @if (s <= dashboardColumns()) { <option [ngValue]="s">{{ s }} col</option> }
+                              }
+                            </select>
+                            <button class="fx-icon-btn sm" (click)="removeDashboardWidget(widget.id)"><mat-icon>close</mat-icon></button>
+                          </div>
+                          @if (widget.type !== 'Grid') {
+                            <div class="fx-rule">
+                              <select class="w-field" [ngModel]="widget.xAxisField" (ngModelChange)="updateDashboardWidget(widget.id, 'xAxisField', $event)" aria-label="Categories">
+                                @for (col of previewColumns(); track col) { <option [value]="col">{{ col }}</option> }
+                              </select>
+                              <select class="w-field" multiple [ngModel]="widget.yAxisFields || []" (ngModelChange)="updateDashboardWidget(widget.id, 'yAxisFields', $event)" aria-label="Values">
+                                @for (col of numericColumns(); track col) { <option [value]="col">{{ col }}</option> }
+                              </select>
+                            </div>
+                          }
+                        </div>
+                      }
+                      <div class="fx-inline-actions">
+                        <button class="fx-link" (click)="addDashboardWidget('Grid')"><mat-icon>table_rows</mat-icon> Add Table</button>
+                        <button class="fx-link" (click)="addDashboardWidget('Bar')"><mat-icon>bar_chart</mat-icon> Add Chart</button>
+                      </div>
+                    }
+                  }
+                </div>
+              }
+            </div>
+
+            <!-- Highlight rules -->
+            <div class="fx-section">
+              <button class="fx-band" (click)="toggleSection('format')" [attr.aria-expanded]="isOpen('format')">
+                <mat-icon class="chev">{{ isOpen('format') ? 'expand_more' : 'chevron_right' }}</mat-icon>
+                <h6>Conditional Formatting</h6>
+                <span class="fx-band-sum">{{ conditionalFormats().length }} rules</span>
+              </button>
+              @if (isOpen('format')) {
+                <div class="fx-section-body">
+                  @if (previewColumns().length === 0) {
+                    <p class="fx-hint">Run a preview first to add formatting rules.</p>
+                  } @else {
+                    @for (rule of conditionalFormats(); track $index; let i = $index) {
+                      <div class="fx-rule">
+                        <select class="w-field" [ngModel]="rule.targetColumn" (ngModelChange)="updateConditionalFormat(i, 'targetColumn', $event)">
+                          @for (col of previewColumns(); track col) { <option [value]="col">{{ col }}</option> }
+                        </select>
+                        <select class="w-op" [ngModel]="rule.operator" (ngModelChange)="updateConditionalFormat(i, 'operator', $event)">
+                          <option value="gt">Greater Than</option>
+                          <option value="gte">Greater or Equal</option>
+                          <option value="lt">Less Than</option>
+                          <option value="lte">Less or Equal</option>
+                          <option value="eq">Equals</option>
+                          <option value="neq">Not Equals</option>
+                          <option value="between">Between</option>
+                          <option value="contains">Contains</option>
+                        </select>
+                        <input class="w-num" [value]="rule.value" (input)="updateConditionalFormat(i, 'value', $any($event.target).value)" placeholder="Value" />
+                        @if (rule.operator === 'between') {
+                          <input class="w-num" [value]="rule.value2 || ''" (input)="updateConditionalFormat(i, 'value2', $any($event.target).value)" placeholder="To" />
+                        }
+                        <input class="w-color" type="color" [value]="rule.backgroundColor || '#fdecea'" (input)="updateConditionalFormat(i, 'backgroundColor', $any($event.target).value)" matTooltip="Background" />
+                        <input class="w-color" type="color" [value]="rule.textColor || '#1d2939'" (input)="updateConditionalFormat(i, 'textColor', $any($event.target).value)" matTooltip="Text" />
+                        <button class="fx-icon-btn sm" (click)="removeConditionalFormat(i)"><mat-icon>close</mat-icon></button>
+                      </div>
+                    }
+                    <button class="fx-link" (click)="addConditionalFormat()"><mat-icon>format_paint</mat-icon> Add Rule</button>
+                  }
+                </div>
+              }
+            </div>
+
+            <!-- Drill-through -->
+            <div class="fx-section">
+              <button class="fx-band" (click)="toggleSection('drill')" [attr.aria-expanded]="isOpen('drill')">
+                <mat-icon class="chev">{{ isOpen('drill') ? 'expand_more' : 'chevron_right' }}</mat-icon>
+                <h6>Drill-Through</h6>
+                <span class="fx-band-sum">{{ drillThroughConfigs().length }} links</span>
+              </button>
+              @if (isOpen('drill')) {
+                <div class="fx-section-body">
+                  @if (previewColumns().length === 0) {
+                    <p class="fx-hint">Run a preview first to add drill-through links.</p>
+                  } @else {
+                    @for (dt of drillThroughConfigs(); track $index; let i = $index) {
+                      <div class="fx-widget">
+                        <div class="fx-rule">
+                          <select class="w-field" [ngModel]="dt.sourceColumn" (ngModelChange)="updateDrillThrough(i, 'sourceColumn', $event)" aria-label="Source Column">
+                            @for (col of previewColumns(); track col) { <option [value]="col">{{ col }}</option> }
+                          </select>
+                          <mat-icon class="muted">arrow_forward</mat-icon>
+                          <button class="fx-pick" (click)="selectDrillThroughTarget(i)">
+                            {{ dt.targetReportName || 'Target Report...' }}
+                          </button>
+                          <button class="fx-icon-btn sm" (click)="removeDrillThrough(i)"><mat-icon>close</mat-icon></button>
+                        </div>
+                        @if (dt.targetReportId) {
+                          @for (mapping of dt.parameterMappings; track $index; let mi = $index) {
+                            <div class="fx-rule indent">
+                              <span class="fx-by">Source Column</span>
+                              <select class="w-field" [ngModel]="mapping.sourceColumn" (ngModelChange)="updateDrillThroughMapping(i, mi, 'sourceColumn', $event)">
+                                @for (col of previewColumns(); track col) { <option [value]="col">{{ col }}</option> }
+                              </select>
+                              <span class="fx-by">&#8594;</span>
+                              <input class="w-op" [value]="mapping.targetParamId" (input)="updateDrillThroughMapping(i, mi, 'targetParamId', $any($event.target).value)" placeholder="Target Param ID" />
+                              <button class="fx-icon-btn sm" (click)="removeDrillThroughMapping(i, mi)"><mat-icon>close</mat-icon></button>
+                            </div>
+                          }
+                          <button class="fx-link indent" (click)="addDrillThroughMapping(i)"><mat-icon>add</mat-icon> Add Mapping</button>
+                        }
+                      </div>
+                    }
+                    <button class="fx-link" (click)="addDrillThrough()"><mat-icon>open_in_new</mat-icon> Add Drill-Through Link</button>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </aside>
+
+        <!-- ============ Results ============ -->
+        <section class="fx-results">
+          <div class="fx-band static">
+            <h6>Results</h6>
+            @if (previewResult()) {
+              <span class="fx-band-sum">
+                {{ previewResult()!.totalCount | number }} rows · {{ previewResult()!.executionTimeMs }} ms
+                @if (previewResult()!.truncated) { · <span class="fx-warn">Truncated</span> }
+              </span>
+              <span class="spacer"></span>
+              <label class="fx-live" matTooltip="Re-run the preview after every change">
+                <input type="checkbox" [checked]="autoPreview()" (change)="toggleAutoPreview()" /> Live preview
+              </label>
+              <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportExcel()"><mat-icon>grid_on</mat-icon>Excel</button>
+              <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportCsv()"><mat-icon>description</mat-icon>CSV</button>
+              <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportPdf()"><mat-icon>picture_as_pdf</mat-icon>PDF</button>
+            }
+          </div>
+
+          <div class="fx-results-body">
+            @if (errorMessage()) {
+              <div class="fx-error" role="alert">
+                <mat-icon>error</mat-icon>
+                <span>{{ errorMessage() }}</span>
+                <button class="fx-icon-btn sm" (click)="errorMessage.set(null)" aria-label="Dismiss"><mat-icon>close</mat-icon></button>
+              </div>
+            }
+
+            @if (loading() && !previewResult()) {
+              <div class="fx-loading"><mat-spinner diameter="28"></mat-spinner> Running report…</div>
+            } @else if (previewResult()) {
+              <div class="fx-result-stack" [class.fx-stale]="loading()" aria-live="polite">
+              @if (!dashboardEnabled()) {
+                @if (layoutType() !== 'Table') {
+                  <div class="fx-card chart">
+                    @if (chartConfig()) {
+                      <canvas #chartCanvas baseChart [type]="chartConfig()!.type" [data]="chartConfig()!.data" [options]="chartConfig()!.options"></canvas>
+                    } @else {
+                      <p class="fx-hint center">Configure the chart fields under <b>Layout</b>.</p>
+                    }
+                  </div>
+                }
+                @if (layoutType() !== 'Chart') {
+                  <ng-container *ngTemplateOutlet="gridTpl"></ng-container>
+                }
+              } @else {
+                <div class="fx-dash" [style.grid-template-columns]="'repeat(' + dashboardColumns() + ', minmax(0, 1fr))'">
+                  @for (widget of dashboardWidgets(); track widget.id; let i = $index) {
+                    <div class="fx-card" [style.grid-column]="'span ' + (dashboardLayout()[i]?.colSpan || 1)">
+                      <div class="fx-card-title">{{ widget.title }}</div>
+                      @if (widget.type === 'Grid') {
+                        <ng-container *ngTemplateOutlet="gridTpl"></ng-container>
+                      } @else if (getWidgetChartConfig(widget); as w) {
+                        <div class="chart"><canvas baseChart [type]="w.type" [data]="w.data" [options]="w.options"></canvas></div>
+                      } @else {
+                        <p class="fx-hint">Configure X-Axis and Y-Axis fields for this chart.</p>
+                      }
+                    </div>
+                  }
+                  @if (dashboardWidgets().length === 0) {
+                    <p class="fx-hint">Add a table or chart under <b>Layout → Dashboard Layout</b>.</p>
+                  }
+                </div>
+              }
+              </div>
+            } @else if (!errorMessage()) {
+              <div class="fx-empty">
+                <mat-icon>table_view</mat-icon>
+                @if (!selectedEntityId()) {
+                  <p>Select a module and entity, pick fields, then click <b>Run Preview</b>.</p>
+                } @else if (selectedFields().length === 0) {
+                  <p>Pick fields, then click <b>Run Preview</b>.</p>
+                } @else {
+                  <p>{{ selectedFields().length }} fields selected. Click <b>Run Preview</b>.</p>
+                }
+              </div>
+            }
+          </div>
+        </section>
+      </div>
+
+      <!-- ============ Footer actions ============ -->
+      <footer class="fx-footer">
+        <span [matTooltip]="runDisabledReason()">
+          <button class="fx-btn fx-btn-primary" (click)="runPreview()" [disabled]="loading() || !!runDisabledReason()">
+            <mat-icon>play_arrow</mat-icon> Run Preview
+          </button>
+        </span>
+        <button class="fx-btn fx-btn-secondary" (click)="quickSave()" [disabled]="!selectedFields().length">
+          <mat-icon>save</mat-icon> Save
+        </button>
+        @if (currentReportId()) {
+          <button class="fx-btn fx-btn-secondary" (click)="openSaveDialog()" [disabled]="!selectedFields().length">Save As...</button>
+        }
+        <span class="fx-stat" [class.dirty]="dirty() && selectedFields().length">
+          @if (dirty() && selectedFields().length) { Unsaved changes }
+          @else if (currentReportId()) { All changes saved }
+        </span>
+        <span class="spacer"></span>
+        <button class="fx-btn fx-btn-ghost" (click)="startNewReport()"><mat-icon>note_add</mat-icon> New Report</button>
+      </footer>
+    } @else {
+      <!-- ============ Saved reports library ============ -->
+      <div class="fx-tabs" role="tablist">
+        <button role="tab" [class.active]="libraryTab() === 'reports'" (click)="libraryTab.set('reports')">My Reports</button>
+        <button role="tab" [class.active]="libraryTab() === 'templates'" (click)="libraryTab.set('templates')">Templates</button>
+      </div>
+      <div class="fx-filterbar">
+        <div class="fx-search wide">
+          <mat-icon>search</mat-icon>
+          <input placeholder="Search by name or description" [ngModel]="librarySearch()" (ngModelChange)="librarySearch.set($event)" />
+        </div>
+        <label class="fx-ctx-field plain">
+          <span>Module</span>
+          <select [ngModel]="libraryModuleId()" (ngModelChange)="libraryModuleId.set($event)">
+            <option [ngValue]="null">All modules</option>
+            @for (m of modules(); track m.moduleId) { <option [ngValue]="m.moduleId">{{ m.moduleName }}</option> }
+          </select>
+        </label>
+        <span class="spacer"></span>
+        <button class="fx-btn fx-btn-primary" (click)="startNewReport()"><mat-icon>add</mat-icon> New Report</button>
+      </div>
+      <div class="fx-lib">
+        @if (libraryTab() === 'reports' ? loadingReports() : loadingTemplates()) {
+          <div class="fx-loading"><mat-spinner diameter="28"></mat-spinner> Loading…</div>
+        } @else {
+          <table class="fx-grid">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Module</th>
+                <th>Description</th>
+                <th>Modified</th>
+                <th class="actions"></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (r of libraryRows(); track r.reportId) {
+                <tr (dblclick)="libraryTab() === 'reports' ? loadReport(r.reportId) : cloneTemplate(r.reportId)">
+                  <td class="strong">{{ r.name }}</td>
+                  <td>{{ moduleName(r.moduleId) }}</td>
+                  <td class="muted">{{ r.description }}</td>
+                  <td>{{ r.modifiedAt | date: 'dd/MM/yyyy HH:mm' }}</td>
+                  <td class="actions">
+                    @if (libraryTab() === 'reports') {
+                      <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="loadReport(r.reportId)">Load</button>
+                      <button class="fx-icon-btn sm danger" (click)="deleteReport(r.reportId)" matTooltip="Delete"><mat-icon>delete_outline</mat-icon></button>
+                    } @else {
+                      <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="cloneTemplate(r.reportId)">Use template</button>
+                    }
+                  </td>
+                </tr>
+              }
+              @if (libraryRows().length === 0) {
+                <tr><td [attr.colspan]="6" class="fx-grid-empty">
+                  {{ librarySearch() || libraryModuleId() ? 'No reports match these filters.' : libraryTab() === 'reports' ? 'No saved reports found.' : 'No templates available.' }}
+                </td></tr>
+              }
+            </tbody>
+          </table>
+        }
+      </div>
+    }
+</main>
+
+<!-- Shared data grid -->
+<ng-template #gridTpl>
+  <div class="fx-grid-wrap">
+    <table class="fx-grid">
+      <thead>
+        <tr>
+          <th class="rownum">#</th>
+          @for (col of previewColumns(); track col) { <th>{{ col }}</th> }
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of previewResult()!.data; track $index; let r = $index) {
+          <tr>
+            <td class="rownum">{{ r + 1 }}</td>
+            @for (col of previewColumns(); track col) {
+              <td [ngStyle]="getCellStyle(row[col], col)"
+                  [class.num]="isNumber(row[col])"
+                  [class.drillable]="!!getDrillThroughForColumn(col)"
+                  (click)="onCellClick(row, col)">{{ formatCellValue(row[col], col) }}</td>
+            }
+          </tr>
+        }
+        @if (previewResult()!.data.length === 0) {
+          <tr><td [attr.colspan]="previewColumns().length + 1" class="fx-grid-empty">No matching records found.</td></tr>
+        }
+      </tbody>
+      @if (totals(); as t) {
+        <tfoot>
+          <tr>
+            <td class="rownum total-label">Total</td>
+            @for (col of previewColumns(); track col) {
+              @if (t[col]) {
+                <td class="num" [matTooltip]="t[col].note || ''">
+                  {{ t[col].value === null ? '—' : formatCellValue(t[col].value, col) }}
+                </td>
+              } @else {
+                <td></td>
+              }
+            }
+          </tr>
+        </tfoot>
+      }
+    </table>
+    @if (totals() && previewResult()!.truncated) {
+      <div class="fx-total-note">Total covers the first {{ previewResult()!.data.length | number }} of {{ previewResult()!.totalCount | number }} rows.</div>
+    }
+  </div>
+</ng-template>
+
+<!-- Save dialog -->
+<ng-template #saveDialogTpl>
+  <div class="fx-dialog">
+    <div class="fx-dialog-head">{{ saveDialogIsTemplate() ? 'Save as Template' : 'Save Report' }}</div>
+    <div class="fx-dialog-body">
+      <label class="fx-form-field">
+        <span>{{ saveDialogIsTemplate() ? 'Template Name' : 'Report Name' }} <i>*</i></span>
+        <input [ngModel]="saveDialogName()" (ngModelChange)="saveDialogName.set($event)" cdkFocusInitial />
+      </label>
+      <label class="fx-form-field">
+        <span>Description</span>
+        <textarea rows="3" [ngModel]="saveDialogDescription()" (ngModelChange)="saveDialogDescription.set($event)"></textarea>
+      </label>
+      <label class="fx-check">
+        <input type="checkbox" [checked]="saveDialogIsTemplate()" (change)="saveDialogIsTemplate.set(!saveDialogIsTemplate())" /> Save as template
+      </label>
+      @if (saveDialogIsTemplate()) {
+        <p class="fx-hint">Templates are available to all users. They can create their own report from this template.</p>
+      }
+    </div>
+    <div class="fx-dialog-foot">
+      <button class="fx-btn fx-btn-primary" [mat-dialog-close]="'save'" [disabled]="!saveDialogName().trim()">{{ saveDialogIsTemplate() ? 'Save Template' : 'Save' }}</button>
+      <button class="fx-btn fx-btn-secondary" mat-dialog-close>Cancel</button>
+    </div>
+  </div>
+</ng-template>
+
+<!-- Report picker (drill-through target) -->
+<ng-template #loadDialogTpl>
+  <div class="fx-dialog wide">
+    <div class="fx-dialog-head">Load Report</div>
+    <div class="fx-dialog-body">
+      @if (loadingReports()) {
+        <div class="fx-loading"><mat-spinner diameter="24"></mat-spinner> Loading…</div>
+      } @else if (savedReports().length === 0) {
+        <p class="fx-hint">No saved reports found.</p>
+      } @else {
+        <div class="fx-picklist">
+          @for (report of savedReports(); track report.reportId) {
+            <button class="fx-pick-row" (click)="loadReport(report.reportId)">
+              <b>{{ report.name }}</b>
+              <span>{{ moduleName(report.moduleId) }}@if (report.description) { · {{ report.description }} }</span>
+            </button>
+          }
+        </div>
+      }
+    </div>
+    <div class="fx-dialog-foot">
+      <button class="fx-btn fx-btn-secondary" mat-dialog-close>Cancel</button>
+    </div>
+  </div>
+</ng-template>
+
+<!-- Run-time prompt dialog -->
+<ng-template #paramPromptTpl>
+  <div class="fx-dialog">
+    <div class="fx-dialog-head">Report Parameters</div>
+    <div class="fx-dialog-body">
+      <p class="fx-hint">Enter values for report parameters before running.</p>
+      @for (param of parameters(); track param.paramId) {
+        <label class="fx-form-field">
+          <span>{{ param.label || param.paramId }}</span>
+          <input [type]="param.dataType === 'Date' ? 'date' : param.dataType === 'Number' ? 'number' : 'text'"
+                 [ngModel]="paramPromptValues()[param.paramId]"
+                 (ngModelChange)="setParamPromptValue(param.paramId, $event)" />
+        </label>
+      }
+    </div>
+    <div class="fx-dialog-foot">
+      <button class="fx-btn fx-btn-primary" [mat-dialog-close]="'run'"><mat-icon>play_arrow</mat-icon> Run</button>
+      <button class="fx-btn fx-btn-secondary" mat-dialog-close>Cancel</button>
+    </div>
+  </div>
+</ng-template>
+
+<!-- New report: module + entity up front -->
+<ng-template #newReportTpl>
+  <div class="fx-dialog" role="dialog" aria-modal="true">
+    <div class="fx-dialog-head">New Report</div>
+    <div class="fx-dialog-body">
+      <label class="fx-form-field">
+        <span>Module <i>*</i></span>
+        <select [ngModel]="newModuleId()" (ngModelChange)="onNewModule($event)">
+          <option [ngValue]="null" disabled>Select module</option>
+          @for (m of modules(); track m.moduleId) { <option [ngValue]="m.moduleId">{{ m.moduleName }}</option> }
+        </select>
+      </label>
+      <label class="fx-form-field">
+        <span>Entity <i>*</i></span>
+        <select [ngModel]="newEntityId()" (ngModelChange)="newEntityId.set($event)" [disabled]="!newModuleId()">
+          <option [ngValue]="null" disabled>{{ newModuleId() ? 'Select entity' : 'Choose a module first' }}</option>
+          @for (e of newEntities(); track e.entityId) { <option [ngValue]="e.entityId">{{ e.entityName }}</option> }
+        </select>
+      </label>
+      @if (newTemplates().length) {
+        <div class="fx-tpl-block">
+          <span class="fx-tpl-cap">Templates</span>
+          @for (t of newTemplates(); track t.reportId) {
+            <button class="fx-pick-row" (click)="useTemplateFromNew(t.reportId)">
+              <b>{{ t.name }}</b>
+              @if (t.description) { <span>{{ t.description }}</span> }
+            </button>
+          }
+        </div>
+      }
+    </div>
+    <div class="fx-dialog-foot">
+      <button class="fx-btn fx-btn-primary" (click)="createNewReport()" [disabled]="!newModuleId() || !newEntityId()">Create Report</button>
+      <button class="fx-btn fx-btn-secondary" mat-dialog-close>Cancel</button>
+    </div>
+  </div>
+</ng-template>

@@ -1,0 +1,211 @@
+<div class="fx-page">
+  @if (notFound()) {
+    <div class="fx-page-body">
+      <div class="fx-empty">
+        <mat-icon>search_off</mat-icon>
+        <p>This report isn't available. It may have been deleted, or it hasn't been shared with you.</p>
+        <button class="fx-btn fx-btn-secondary" (click)="router.navigate(['/reports'])">Back to Reports</button>
+      </div>
+    </div>
+  } @else if (!report()) {
+    <div class="fx-loading"><mat-spinner diameter="28"></mat-spinner> Opening report…</div>
+  } @else {
+    <!-- Report context -->
+    <section class="fx-context">
+      <div class="fx-ctx-title">
+        <button class="fx-crumb" (click)="router.navigate(['/reports'])"><mat-icon>arrow_back</mat-icon>All reports</button>
+        <span class="fx-run-title">{{ report()!.name }}</span>
+        <span class="fx-ctx-sub">{{ moduleName() }}@if (report()!.description) { · {{ report()!.description }} }</span>
+      </div>
+      @if (schedule(); as s) {
+        <span class="fx-status" [class.ok]="s.active" [class.off]="!s.active"><mat-icon class="tiny">event_repeat</mat-icon>{{ scheduleText(s) }}</span>
+      }
+      <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="openSchedule()">
+        <mat-icon>event_repeat</mat-icon>{{ schedule() ? 'Edit Schedule' : 'Schedule' }}
+      </button>
+      <button class="fx-btn fx-btn-ghost fx-btn-sm" (click)="editInBuilder()" matTooltip="Change fields, filters or layout (report designers)">
+        <mat-icon>edit</mat-icon>Edit in Builder
+      </button>
+    </section>
+
+    <div class="fx-page-body">
+      <!-- Parameters -->
+      @if (controls().length) {
+        <div class="fx-panel">
+          <div class="fx-band static">
+            <h6>Report Parameters</h6>
+            <span class="fx-band-sum">
+              @switch (prefilledFrom()) {
+                @case ('last') { Filled in from your last run }
+                @case ('link') { Filled in from the link you followed }
+                @default { Report defaults }
+              }
+            </span>
+          </div>
+          <div class="fx-pad">
+            <div class="fx-run-inputs">
+              @for (c of controls(); track $index) {
+                @switch (c.kind) {
+                  @case ('range') {
+                    @if (c.kind === 'range') {
+                      <div class="fx-form-field fx-span2">
+                        <span>{{ rangeLabel(c) }} <i>*</i></span>
+                        <div class="fx-range">
+                          <input type="date" [ngModel]="values()[c.from.paramId]" (ngModelChange)="setValue(c.from.paramId, $event)" [attr.aria-label]="c.from.label" />
+                          <span class="fx-hint">to</span>
+                          <input type="date" [ngModel]="values()[c.to.paramId]" (ngModelChange)="setValue(c.to.paramId, $event)" [attr.aria-label]="c.to.label" />
+                        </div>
+                        <div class="fx-presets">
+                          @for (p of PRESETS; track p) {
+                            <button [class.on]="isPreset(c, p)" (click)="applyPreset(c, p)">{{ p }}</button>
+                          }
+                        </div>
+                        @if (submitted() && rangeErrors()[c.from.paramId]) {
+                          <small class="fx-field-error">{{ rangeErrors()[c.from.paramId] }}</small>
+                        }
+                      </div>
+                    }
+                  }
+                  @case ('list') {
+                    @if (c.kind === 'list') {
+                      <label class="fx-form-field">
+                        <span>{{ c.param.label || c.param.paramId }}</span>
+                        <select [ngModel]="values()[c.param.paramId]" (ngModelChange)="setValue(c.param.paramId, $event)">
+                          <option value="">All</option>
+                          @for (o of listOptions()[c.param.paramId] || []; track o) { <option [value]="o">{{ o }}</option> }
+                        </select>
+                      </label>
+                    }
+                  }
+                  @case ('bool') {
+                    @if (c.kind === 'bool') {
+                      <label class="fx-form-field">
+                        <span>{{ c.param.label || c.param.paramId }}</span>
+                        <select [ngModel]="values()[c.param.paramId]" (ngModelChange)="setValue(c.param.paramId, $event)">
+                          <option value="">Any</option><option value="true">Yes</option><option value="false">No</option>
+                        </select>
+                      </label>
+                    }
+                  }
+                  @default {
+                    <label class="fx-form-field">
+                      <span>{{ c.param.label || c.param.paramId }}</span>
+                      <input [type]="c.kind === 'date' ? 'date' : c.kind === 'number' ? 'number' : 'text'"
+                             [ngModel]="values()[c.param.paramId]" (ngModelChange)="setValue(c.param.paramId, $event)" />
+                    </label>
+                  }
+                }
+              }
+            </div>
+            <div class="fx-run-actions">
+              <button class="fx-btn fx-btn-primary" (click)="run()" [disabled]="running() && !inBackground()">
+                @if (running() && !inBackground()) { <mat-spinner diameter="16"></mat-spinner> Running… } @else { <mat-icon>play_arrow</mat-icon> Run Report }
+              </button>
+              @if (prefilledFrom() !== 'defaults') {
+                <button class="fx-link" (click)="resetToDefaults()">Reset to report defaults</button>
+              }
+              <span class="spacer"></span>
+              <span class="fx-hint">Large reports keep running in the background, and you're notified when they're ready.</span>
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- Results -->
+      <div class="fx-panel fx-run-results" aria-live="polite">
+        <div class="fx-band static">
+          <h6>Results</h6>
+          @if (result(); as r) {
+            <span class="fx-band-sum">
+              {{ r.totalCount | number }} rows · {{ r.executionTimeMs }} ms
+              @if (r.truncated) { · <span class="fx-warn">Truncated</span> }
+            </span>
+            <span class="spacer"></span>
+            <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportExcel()"><mat-icon>grid_on</mat-icon>Excel</button>
+            <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportCsv()"><mat-icon>description</mat-icon>CSV</button>
+            <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportPdf()"><mat-icon>picture_as_pdf</mat-icon>PDF</button>
+          }
+        </div>
+
+        <div class="fx-pad fx-run-body">
+          @if (error()) {
+            <div class="fx-error" role="alert">
+              <mat-icon>error</mat-icon><span>{{ error() }}</span>
+              <button class="fx-icon-btn sm" (click)="error.set(null)" aria-label="Dismiss"><mat-icon>close</mat-icon></button>
+            </div>
+          }
+
+          @if (inBackground()) {
+            <div class="fx-bgrun">
+              <mat-spinner diameter="18"></mat-spinner>
+              <div>
+                <b>Still running: {{ report()!.name }}</b>
+                <p class="fx-hint">This one covers a lot of data. You can keep working or leave this page; you'll get a notification when it's ready.</p>
+              </div>
+            </div>
+          }
+
+          @if (result(); as r) {
+            <div [class.fx-stale]="running()">
+              @if (ranWith().length) {
+                <div class="fx-crit">
+                  @for (p of ranWith(); track p.label) { <span>{{ p.label }}: <b>{{ p.value }}</b></span> }
+                </div>
+              }
+
+              @if (showChart() && chart(); as ch) {
+                <div class="fx-card chart fx-run-chart">
+                  <canvas baseChart [type]="ch.type" [data]="ch.data" [options]="ch.options"></canvas>
+                </div>
+              }
+
+              @if (showTable()) {
+                <div class="fx-grid-wrap fx-run-grid">
+                  <table class="fx-grid">
+                    <thead>
+                      <tr><th class="rownum">#</th>@for (col of columns(); track col) { <th>{{ col }}</th> }</tr>
+                    </thead>
+                    <tbody>
+                      @for (row of r.data; track $index; let i = $index) {
+                        <tr>
+                          <td class="rownum">{{ i + 1 }}</td>
+                          @for (col of columns(); track col) {
+                            <td [ngStyle]="style(row[col], col)" [class.num]="isNum(row[col])" [class.drillable]="!!drillFor(col)"
+                                (click)="drill(row, col)">{{ format(row[col], col) }}</td>
+                          }
+                        </tr>
+                      }
+                      @if (r.data.length === 0) {
+                        <tr><td [attr.colspan]="columns().length + 1" class="fx-grid-empty">No records match these parameters. Try a wider date range.</td></tr>
+                      }
+                    </tbody>
+                    @if (totals(); as t) {
+                      <tfoot>
+                        <tr>
+                          <td class="rownum total-label">Total</td>
+                          @for (col of columns(); track col) {
+                            @if (t[col]) {
+                              <td class="num" [matTooltip]="t[col].note || ''">{{ t[col].value === null ? '—' : format(t[col].value, col) }}</td>
+                            } @else { <td></td> }
+                          }
+                        </tr>
+                      </tfoot>
+                    }
+                  </table>
+                  @if (totals() && r.truncated) {
+                    <div class="fx-total-note">Total covers the first {{ r.data.length | number }} of {{ r.totalCount | number }} rows.</div>
+                  }
+                </div>
+              }
+            </div>
+          } @else if (!inBackground() && !error()) {
+            <div class="fx-empty small">
+              <mat-icon>table_view</mat-icon>
+              <p>{{ running() ? 'Running report…' : 'Check the parameters, then run the report.' }}</p>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  }
+</div>

@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Reports · Run screen (design review)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+<style>
+:root{--blue:#0065cb;--blue-dark:#0052a5;--orange:#fe6300;--page:#f4f7ff;--band:#f8f9fa;--strip:#dce9fb;--dd:#d0e2ff;
+--ink:#212529;--ink2:#3d3d3d;--ink3:#6c757d;--line:#e0e0e0;--field:rgba(61,61,61,.5);
+--ok:#137a4a;--ok-bg:#e6f5ee;--warn:#9a6400;--warn-bg:#fff4e0;--danger:#c62828;--danger-bg:#fdeaea}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;background:var(--page);color:var(--ink);font:14px/1.4 Roboto,system-ui,sans-serif;overflow:hidden}
+button{font:inherit;cursor:pointer}input,select{font:inherit}
+.mi{font-family:'Material Icons';font-size:18px;line-height:1;vertical-align:-4px;font-style:normal}
+select,input[type=text],input[type=date],input[type=email],input[type=time]{height:34px;border:1px solid var(--field);border-radius:4px;background:#fff;padding:0 8px;font-size:13px;color:var(--ink2);min-width:0}
+select:focus,input:focus{outline:0;border-color:var(--blue);box-shadow:0 0 0 2px rgba(0,101,203,.15)}
+.btn{height:34px;border:1px solid var(--blue);border-radius:4px;padding:0 14px;font-size:14.4px;display:inline-flex;align-items:center;gap:6px;background:#fff;color:var(--blue);white-space:nowrap}
+.btn:hover{background:#eef4fd}.btn.p{background:var(--blue);color:#fff}.btn.p:hover{background:var(--blue-dark)}
+.btn.sm{height:28px;padding:0 10px;font-size:13px}.btn.ghost{border-color:transparent}
+.link{border:0;background:none;color:var(--blue);font-size:13px;font-weight:500;padding:0;white-space:nowrap}
+.link:hover{text-decoration:underline}
+/* shell */
+.appbar{height:55px;background:#fff;display:flex;align-items:center;gap:8px;padding:0 16px;box-shadow:0 1px 0 var(--line);position:relative;z-index:30}
+.appbar h4{margin:0 0 0 24px;font-size:20.8px;font-weight:500;color:var(--blue)}
+.sp{flex:1}.ctx{font-size:13px;color:var(--ink3)}
+.ib{width:34px;height:34px;border:0;background:none;border-radius:4px;color:var(--blue);display:grid;place-items:center;position:relative}
+.ib:hover{background:#eef4fd}.dot{position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:var(--orange);border:2px solid #fff}
+.av{width:32px;height:32px;border-radius:50%;background:#cfe0f5;color:var(--blue);display:grid;place-items:center;font-size:13px;font-weight:500}
+.shell{display:flex;height:calc(100% - 55px)}
+.rail{width:88px;flex:0 0 88px;background:#fff;border-right:1px solid var(--line)}
+.rail button{width:100%;min-height:57px;border:0;border-left:4.67px solid transparent;background:none;color:var(--ink2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px}
+.rail button .mi{font-size:20px}.rail button.on{background:var(--blue);color:#fff;border-left-color:var(--orange)}
+.main{flex:1;min-width:0;display:flex}
+/* report list */
+.list{width:300px;flex:0 0 300px;background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column}
+.tabs{display:flex;border-bottom:1px solid var(--blue);padding:0 8px;flex:0 0 auto}
+.tabs button{border:1px solid transparent;border-bottom:0;background:none;height:36px;padding:0 12px;font-size:14.4px;color:var(--ink2);border-radius:4px 4px 0 0}
+.tabs button.on{color:var(--blue);border-color:var(--blue);background:#fff;margin-bottom:-1px}
+.search{margin:10px;display:flex;align-items:center;gap:4px;border:1px solid var(--field);border-radius:4px;height:34px;padding:0 6px}
+.search input{border:0;height:30px;flex:1;padding:0 2px;box-shadow:none}
+.search .mi{color:var(--ink3)}
+.scroll{flex:1;overflow:auto;padding-bottom:12px}
+.grp{font-size:12px;font-weight:500;color:var(--ink3);padding:10px 14px 4px;display:flex;justify-content:space-between}
+.item{display:block;width:100%;text-align:left;border:0;border-left:3px solid transparent;background:none;padding:7px 12px 7px 11px}
+.item:hover{background:#f5f9ff}.item.on{background:#eef4fd;border-left-color:var(--blue)}
+.item b{display:block;font-weight:500;font-size:13.5px;color:var(--ink)}.item span{font-size:12px;color:var(--ink3)}
+.item .when{float:right;font-size:11.5px;color:var(--ink3)}
+/* work area */
+.work{flex:1;min-width:0;display:flex;flex-direction:column;overflow:auto;padding:10px;gap:10px}
+.strip{background:var(--strip);border:1px solid #c5d9f2;border-radius:4px;padding:9px 14px;display:flex;align-items:center;gap:14px}
+.strip h2{margin:0;font-size:17px;font-weight:500;color:#0b3c6d}.strip small{display:block;font-size:12px;color:#3f5f80}
+.panel{background:#fff;border:1px solid var(--line);border-radius:4px}
+.band{min-height:40px;background:var(--band);border-bottom:1px solid var(--line);padding:5px 13px;display:flex;align-items:center;gap:10px;border-radius:4px 4px 0 0}
+.band h6{margin:0;font-size:16px;font-weight:500}.band .sum{font-size:12.5px;color:var(--ink3)}
+.pad{padding:12px 13px}
+.inputs{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px 14px;align-items:start}
+.inputs .wide{grid-column:span 2;min-width:0}
+.fld label{display:block;font-size:12.5px;color:var(--ink2);margin-bottom:3px}.fld label i{color:var(--orange);font-style:normal}
+.fld select,.fld input{width:100%}.fld .src{font-size:11.5px;color:var(--ink3);margin-top:3px}
+.range{display:flex;gap:6px;align-items:center}.range input{flex:1}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.chip{border:1px solid #c9d4e0;background:#fff;border-radius:3px;height:24px;padding:0 8px;font-size:12px;color:var(--ink2)}
+.chip.on{background:var(--blue);border-color:var(--blue);color:#fff}
+.actions{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}
+.hint{font-size:12px;color:var(--ink3)}
+.crit{display:flex;flex-wrap:wrap;gap:6px;font-size:12px}
+.crit span{background:#eef4fd;border:1px solid #c9dcf5;color:#0b3c6d;border-radius:3px;padding:2px 8px}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px}
+th{position:sticky;top:0;background:var(--band);text-align:left;font-weight:500;font-size:12.5px;padding:7px 10px;border-bottom:1px solid var(--line);border-right:1px solid var(--line)}
+td{padding:6px 10px;border-bottom:1px solid #eee;border-right:1px solid #f0f0f0;color:var(--ink2)}
+th:last-child,td:last-child{border-right:0}td.n{text-align:right;font-variant-numeric:tabular-nums}
+tfoot td{background:#eef4fb;font-weight:500;color:var(--ink);border-top:2px solid #c5d9f2}
+.bg-run{display:flex;gap:12px;align-items:center;background:var(--warn-bg);border:1px solid #f0d49a;border-left:3px solid #e6a23c;border-radius:4px;padding:10px 12px;margin:12px 13px}
+.spin{width:18px;height:18px;border:2px solid #e6c98a;border-top-color:var(--warn);border-radius:50%;animation:s 1s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+/* notifications + drawer */
+.pop{position:absolute;top:50px;right:60px;width:340px;background:#fff;border:1px solid var(--line);border-radius:4px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:40;display:none}
+.pop.on{display:block}.pop header{padding:10px 12px;font-weight:500;border-bottom:1px solid var(--line)}
+.note{padding:10px 12px;border-bottom:1px solid #f0f0f0;font-size:13px}.note small{display:block;color:var(--ink3);font-size:12px}
+.drawer{position:absolute;top:55px;right:0;bottom:0;width:420px;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.08);z-index:35;display:none;flex-direction:column}
+.drawer.on{display:flex}.drawer .dh{background:var(--blue);color:#fff;padding:11px 15px;font-size:16px;font-weight:500;display:flex;align-items:center}
+.drawer .db{padding:15px;overflow:auto;flex:1;display:flex;flex-direction:column;gap:12px}
+.drawer .df{padding:11px 15px;border-top:1px solid var(--line);display:flex;gap:8px;background:#fcfdff}
+.seg{display:inline-flex;border:1px solid #c9d4e0;border-radius:4px;overflow:hidden}
+.seg button{border:0;border-right:1px solid #e1e6ec;background:#fff;height:32px;padding:0 12px;font-size:13px;color:var(--ink2)}
+.seg button:last-child{border-right:0}.seg button.on{background:var(--blue);color:#fff;font-weight:500}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chk{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ink2)}.chk input{accent-color:var(--blue);width:15px;height:15px}
+.review{position:fixed;left:100px;bottom:14px;background:#212529;color:#fff;border-radius:4px;padding:8px 12px;font-size:12.5px;display:flex;gap:10px;align-items:center;z-index:50}
+.review button{background:#3a4047;border:0;color:#fff;border-radius:3px;height:26px;padding:0 10px;font-size:12px}
+.review button.on{background:var(--orange)}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <img src="src/app-medinous-report-builder-master/public/medinous-logo.svg" alt="Medinous" height="25" />
+  <h4>Reports</h4>
+  <span class="sp"></span>
+  <span class="ctx">Medinous QA Clinic · Billing</span>
+  <button class="ib" id="bell" aria-label="Notifications"><i class="mi">notifications_none</i><span class="dot hidden" id="bellDot"></span></button>
+  <button class="ib" aria-label="Switch module"><i class="mi">apps</i></button>
+  <span class="av">AS</span>
+</header>
+
+<div class="pop" id="pop">
+  <header>Notifications</header>
+  <div class="note" id="noteReady"><b>Report ready:</b> Outstanding OP Bills
+    <small>01/09/2026 – 27/09/2026 · All departments · 1,284 rows</small>
+    <div style="margin-top:6px;display:flex;gap:8px"><button class="btn sm p" onclick="showResults();togglePop()">Open</button><button class="btn sm">Excel</button></div>
+  </div>
+  <div class="note">Scheduled: <b>Daily Collection by Payment Mode</b> was emailed to you
+    <small>Today 06:00 · Excel</small></div>
+</div>
+
+<div class="shell">
+  <nav class="rail">
+    <button class="on"><i class="mi">summarize</i>Reports</button>
+    <button><i class="mi">event_repeat</i>My Schedules</button>
+  </nav>
+
+  <div class="main">
+    <!-- Report list: only reports this user has access to -->
+    <aside class="list">
+      <div class="search"><i class="mi">search</i><input type="text" placeholder="Search reports" /></div>
+      <div class="scroll">
+        <div class="grp">Recently run</div>
+        <button class="item on" data-r="coll"><span class="when">Today 09:12</span><b>Daily Collection by Payment Mode</b><span>Billing</span></button>
+        <button class="item" data-r="out"><span class="when">Yesterday</span><b>Outstanding OP Bills</b><span>Billing</span></button>
+
+        <div class="grp">Billing <span>3</span></div>
+        <button class="item" data-r="coll"><b>Daily Collection by Payment Mode</b><span>Receipt totals per payment mode</span></button>
+        <button class="item" data-r="out"><b>Outstanding OP Bills</b><span>Unpaid and part-paid bills</span></button>
+        <button class="item" data-r="docc"><b>Doctor-wise Collection</b><span>Collections per doctor and department</span></button>
+        <div class="grp">Registration <span>2</span></div>
+        <button class="item" data-r="opv"><b>OP Visits by Department</b><span>Consulted visits and average wait</span></button>
+        <button class="item" data-r="reg"><b>New Registrations</b><span>Patients registered in a period</span></button>
+        <div class="grp">Laboratory <span>1</span></div>
+        <button class="item" data-r="tat"><b>Lab Turnaround by Section</b><span>Average TAT per section</span></button>
+      </div>
+    </aside>
+
+    <section class="work">
+      <!-- Report context -->
+      <div class="strip">
+        <div style="flex:1">
+          <h2 id="rTitle">Daily Collection by Payment Mode</h2>
+          <small id="rDesc">Billing · Receipt totals per payment mode, for the cash counter close · Last run today 09:12 by you</small>
+        </div>
+        <button class="btn sm" onclick="openDrawer()"><i class="mi">event_repeat</i>Schedule</button>
+      </div>
+
+      <!-- Inputs: defined per report in the builder (Parameters) -->
+      <div class="panel">
+        <div class="band"><h6>Report Parameters</h6><span class="sum">Filled in from your last run</span></div>
+        <div class="pad">
+          <div class="inputs">
+            <div class="fld wide">
+              <label>Date range <i>*</i></label>
+              <div class="range"><input type="date" value="2026-09-01" aria-label="From date" /><span class="hint">to</span><input type="date" value="2026-09-27" aria-label="To date" /></div>
+              <div class="chips" id="presets">
+                <button class="chip">Today</button><button class="chip">Yesterday</button><button class="chip on">This month</button><button class="chip">Last month</button><button class="chip">Last 7 days</button>
+              </div>
+            </div>
+            <div class="fld">
+              <label>Department</label>
+              <select id="dept"><option>All departments</option><option>Cardiology</option><option>General Medicine</option><option>Orthopaedics</option><option>Paediatrics</option></select>
+              <div class="src">From Department master</div>
+            </div>
+            <div class="fld">
+              <label>Doctor</label>
+              <select id="doc"><option>All doctors</option><option>Dr. Sameer Rao</option><option>Dr. Huda Al-Aali</option><option>Dr. Hisham Ali</option></select>
+              <div class="src" id="docSrc">From Doctor master</div>
+            </div>
+            <div class="fld">
+              <label>Cashier</label>
+              <select><option>All cashiers</option><option>Cashier - Rashid</option><option>Cashier - Neha</option></select>
+              <div class="src">From User master</div>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn p" onclick="run()"><i class="mi">play_arrow</i>Run Report</button>
+            <button class="link" onclick="resetInputs()">Reset to report defaults</button>
+            <span class="sp"></span>
+            <span class="hint">Large reports keep running in the background, and you're notified when they're ready.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="panel" id="results">
+        <div class="band">
+          <h6>Results</h6><span class="sum">4 rows · 0.4 s</span>
+          <span class="sp"></span>
+          <button class="btn sm"><i class="mi">grid_on</i>Excel</button>
+          <button class="btn sm"><i class="mi">description</i>CSV</button>
+          <button class="btn sm"><i class="mi">picture_as_pdf</i>PDF</button>
+          <button class="btn sm"><i class="mi">print</i>Print</button>
+        </div>
+        <div class="pad" style="padding-bottom:0">
+          <div class="crit" id="crit"><span>01/09/2026 – 27/09/2026</span><span>All departments</span><span>All doctors</span><span>All cashiers</span></div>
+          <div class="hint" style="margin:6px 0 10px">These parameters also print at the top of Excel and PDF, under the hospital name and logo.</div>
+        </div>
+        <div id="bgRun" class="bg-run hidden">
+          <div class="spin"></div>
+          <div style="flex:1"><b>Still running: Outstanding OP Bills</b><div class="hint">This one covers a lot of data. You can keep working; you'll get a notification when it's ready.</div></div>
+          <button class="btn sm" onclick="finishBg()">Simulate: finish</button>
+        </div>
+        <div id="table" style="padding:0 13px 13px">
+          <table>
+            <thead><tr><th>Payment Mode</th><th>Count of Receipt No</th><th>Total Amount Received</th></tr></thead>
+            <tbody>
+              <tr><td>Card</td><td class="n">35</td><td class="n">593.30</td></tr>
+              <tr><td>Cheque</td><td class="n">21</td><td class="n">568.10</td></tr>
+              <tr><td>Cash</td><td class="n">11</td><td class="n">470.10</td></tr>
+              <tr><td>BenefitPay</td><td class="n">15</td><td class="n">432.00</td></tr>
+            </tbody>
+            <tfoot><tr><td>Total</td><td class="n">82</td><td class="n">2,063.50</td></tr></tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- Schedule drawer -->
+<aside class="drawer" id="drawer" role="dialog" aria-label="Schedule report">
+  <div class="dh">Schedule: Daily Collection by Payment Mode<span class="sp"></span><button class="ib" style="color:#fff" onclick="closeDrawer()" aria-label="Close"><i class="mi">close</i></button></div>
+  <div class="db">
+    <div class="fld"><label>Repeat</label>
+      <div class="seg"><button class="on">Daily</button><button>Weekly</button><button>Monthly</button></div></div>
+    <div class="row2">
+      <div class="fld"><label>Run at</label><input type="time" value="06:00" /></div>
+      <div class="fld"><label>Starting</label><input type="date" value="2026-09-28" /></div>
+    </div>
+    <div class="fld"><label>Date range for each run <i>*</i></label>
+      <select><option>Previous day</option><option>Month to date</option><option>Previous month</option><option>Previous 7 days</option></select>
+      <div class="src">Scheduled runs use a rolling period, not fixed dates.</div></div>
+    <div class="fld"><label>Other parameters</label>
+      <div class="crit"><span>All departments</span><span>All doctors</span><span>All cashiers</span></div>
+      <div class="src">Copied from the form. <button class="link" onclick="closeDrawer()">Change them there</button></div></div>
+    <div class="fld"><label>Deliver to</label>
+      <label class="chk"><input type="checkbox" checked /> Notification in Medinous</label>
+      <label class="chk"><input type="checkbox" checked /> Email</label>
+      <input type="email" value="asma@medinousqa.com" style="width:100%;margin-top:6px" /></div>
+    <div class="fld"><label>File</label>
+      <div class="seg"><button class="on">Excel</button><button>PDF</button><button>CSV</button></div></div>
+  </div>
+  <div class="df"><button class="btn p" onclick="closeDrawer()">Save Schedule</button><button class="btn" onclick="closeDrawer()">Cancel</button></div>
+</aside>
+
+<!-- Review helper (not part of the design) -->
+<div class="review">Review states:
+  <button id="sFast" class="on" onclick="showResults()">Quick report</button>
+  <button id="sBg" onclick="startBg()">Long report (background)</button>
+  <button onclick="openDrawer()">Schedule drawer</button>
+</div>
+
+<script>
+const reports={
+  coll:['Daily Collection by Payment Mode','Billing · Receipt totals per payment mode, for the cash counter close · Last run today 09:12 by you'],
+  out:['Outstanding OP Bills','Billing · Unpaid and part-paid bills with patient details · Last run yesterday by you'],
+  docc:['Doctor-wise Collection','Billing · Collections per doctor and department · Never run by you'],
+  opv:['OP Visits by Department','Registration · Consulted visits and average wait per department · Never run by you'],
+  reg:['New Registrations','Registration · Patients registered in a period · Never run by you'],
+  tat:['Lab Turnaround by Section','Laboratory · Average turnaround time per lab section · Never run by you'],
+};
+document.querySelectorAll('.item').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.item').forEach(x=>x.classList.toggle('on',x===b));
+  const r=reports[b.dataset.r];document.getElementById('rTitle').textContent=r[0];document.getElementById('rDesc').textContent=r[1];
+  document.querySelector('.drawer .dh').firstChild.textContent='Schedule: '+r[0];
+});
+document.querySelectorAll('#presets .chip').forEach(c=>c.onclick=()=>{document.querySelectorAll('#presets .chip').forEach(x=>x.classList.toggle('on',x===c));});
+document.getElementById('dept').onchange=e=>{const d=e.target.value;const doc=document.getElementById('doc');
+  doc.innerHTML=d==='Cardiology'?'<option>All doctors in Cardiology</option><option>Dr. Hisham Ali</option><option>Dr. Ravi Shankar</option>':'<option>All doctors</option><option>Dr. Sameer Rao</option><option>Dr. Huda Al-Aali</option><option>Dr. Hisham Ali</option>';
+  document.getElementById('docSrc').textContent=d==='All departments'?'From Doctor master':'Narrowed to '+d;
+  document.getElementById('crit').children[1].textContent=d;document.getElementById('crit').children[2].textContent=doc.value;};
+function run(){showResults();}
+function showResults(){['bgRun'].forEach(i=>document.getElementById(i).classList.add('hidden'));document.getElementById('table').classList.remove('hidden');
+  document.getElementById('sFast').classList.add('on');document.getElementById('sBg').classList.remove('on');}
+function startBg(){document.getElementById('bgRun').classList.remove('hidden');document.getElementById('table').classList.add('hidden');
+  document.getElementById('sBg').classList.add('on');document.getElementById('sFast').classList.remove('on');}
+function finishBg(){document.getElementById('bellDot').classList.remove('hidden');togglePop(true);}
+function togglePop(force){const p=document.getElementById('pop');p.classList.toggle('on',force===true?true:!p.classList.contains('on'));document.getElementById('bellDot').classList.add('hidden');}
+document.getElementById('bell').onclick=()=>togglePop();
+function openDrawer(){document.getElementById('drawer').classList.add('on');}
+function closeDrawer(){document.getElementById('drawer').classList.remove('on');}
+function resetInputs(){document.querySelectorAll('#presets .chip').forEach((x,i)=>x.classList.toggle('on',i===2));}
+</script>
+</body>
+</html>

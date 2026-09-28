@@ -1,0 +1,82 @@
+@use '@angular/material' as mat;
+@use 'fusion';
+
+html {
+  height: 100%;
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$blue-palette,
+        tertiary: mat.$orange-palette,
+      ),
+      typography: 'Roboto',
+      density: 0,
+    )
+  );
+
+  // Medinous Fusion color overrides
+  --mat-sys-primary: #0066cc;
+  --mat-sys-on-primary: #ffffff;
+  --mat-sys-primary-container: #e8f1fc;
+  --mat-sys-on-primary-container: #002e5b;
+  --mat-sys-secondary: #4d5b6e;
+  --mat-sys-on-secondary: #ffffff;
+  --mat-sys-secondary-container: #d8e0ea;
+  --mat-sys-on-secondary-container: #002e5b;
+  --mat-sys-tertiary: #ff6400;
+  --mat-sys-on-tertiary: #ffffff;
+  --mat-sys-tertiary-container: #fff6ef;
+  --mat-sys-on-tertiary-container: #db5400;
+  --mat-sys-surface: #f3f7fb;
+  --mat-sys-on-surface: #002e5b;
+  --mat-sys-surface-container: #ffffff;
+  --mat-sys-surface-container-low: #fafbfc;
+  --mat-sys-surface-container-lowest: #ffffff;
+  --mat-sys-surface-container-high: #edf2f7;
+  --mat-sys-on-surface-variant: #4d5b6e;
+  --mat-sys-outline: #c0ccda;
+  --mat-sys-outline-variant: #d8e0ea;
+  --mat-sys-error: #d92d20;
+  --mat-sys-on-error: #ffffff;
+  --mat-sys-error-container: #fdeceb;
+  --mat-sys-on-error-container: #d92d20;
+}
+
+:root {
+  --blue: #0065cb;
+  --blue-dark: #0052a5;
+  --orange: #fe6300;
+  --page: #f4f7ff;
+  --band: #f8f9fa;
+  --strip: #dce9fb;
+  --dd: #d0e2ff;
+  --ink: #212529;
+  --ink2: #3d3d3d;
+  --ink3: #6c757d;
+  --line: #e0e0e0;
+  --field: rgba(61, 61, 61, 0.5);
+  --danger: #c62828;
+  --danger-bg: #fdeaea;
+  --warn: #9a6400;
+  --warn-bg: #fff4e0;
+}
+
+body {
+  color-scheme: light;
+  background: var(--page);
+  color: var(--ink);
+  font-family: Roboto, -apple-system, 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  margin: 0;
+  height: 100%;
+}
+
+// Fusion dialogs: square-ish corners, no Material padding (content supplies its own)
+.mat-mdc-dialog-container .mat-mdc-dialog-surface {
+  border-radius: 4px !important;
+  overflow: hidden;
+}
+.mat-mdc-tooltip .mdc-tooltip__surface {
+  font-size: 12px;
+  background: #212529;
+}

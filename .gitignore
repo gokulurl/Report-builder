@@ -1,0 +1,14 @@
+# dependencies / build output
+node_modules/
+dist/
+.angular/
+*.bak
+
+# devops engineer's originals — not part of the UI redesign repo
+*.zip
+src/framework/
+src/original-poc/
+SPEC.md
+CODEBASE.md
+report-configuration-guide 1.html
+user-guide 1.html
