@@ -64,7 +64,7 @@ function f(
   label: string,
   category: string,
   dataType: 'String' | 'Number' | 'Date' | 'Boolean',
-  opts: { desc?: string; computed?: boolean; groupable?: boolean; aggs?: string[]; related?: boolean; restricted?: boolean } = {}
+  opts: { desc?: string; computed?: boolean; groupable?: boolean; aggs?: string[]; related?: boolean; restricted?: boolean; kind?: 'money' | 'integer' | 'decimal' } = {}
 ) {
   FIELDS.push({
     fieldId: fid++,
@@ -82,104 +82,116 @@ function f(
     isComputed: !!opts.computed,
     isRelated: !!opts.related,
     isRestricted: !!opts.restricted,
+    numberKind: dataType === 'Number' ? opts.kind || 'decimal' : undefined,
     allowedAggregations:
       opts.aggs ?? (dataType === 'Number' ? NUM_AGGS : dataType === 'Date' ? DATE_AGGS : STR_AGGS),
   });
 }
 
+// Column catalogue. Every column has a description (PRD 6.3) and only the summaries that make sense for it
+// (PRD Appendix: "Summaries" per column). Numbers carry a kind so formats only offer what fits.
+const ID = { aggs: ['Count', 'CountDistinct'], groupable: false };
+const CAT = { aggs: ['Count'] };
+const NAME = { aggs: ['Count'], groupable: false };
+const DATE = { aggs: ['Min', 'Max', 'Count'] };
+const MONEY = { aggs: ['Sum', 'Avg', 'Min', 'Max'], kind: 'money' as const, groupable: false };
+const MEASURE = { aggs: ['Avg', 'Min', 'Max'], kind: 'integer' as const, groupable: false };
+const COUNTABLE = { aggs: ['Sum', 'Avg', 'Max'], kind: 'integer' as const, groupable: false };
+
 // 1 Patients
-f(1, 'PatientId', 'Patient ID', 'Identification', 'String', { desc: 'Medical record number' });
-f(1, 'FullName', 'Patient Name', 'Identification', 'String', { computed: true, desc: 'First + last name' });
-f(1, 'Gender', 'Gender', 'Demographics', 'String');
-f(1, 'DateOfBirth', 'Date of Birth', 'Demographics', 'Date');
-f(1, 'Age', 'Age (Years)', 'Demographics', 'Number', { computed: true });
-f(1, 'Nationality', 'Nationality', 'Demographics', 'String');
-f(1, 'MobileNo', 'Mobile No', 'Contact', 'String', { restricted: true, desc: 'Restricted: exporting asks for a reason' });
-f(1, 'City', 'City', 'Contact', 'String');
-f(1, 'PatientType', 'Patient Type', 'Registration', 'String', { desc: 'Cash, Insurance or Corporate' });
-f(1, 'RegistrationDate', 'Registration Date', 'Registration', 'Date');
-f(1, 'RegisteredBy', 'Registered By', 'Registration', 'String');
-f(1, 'IsVip', 'VIP', 'Registration', 'Boolean');
+f(1, 'PatientId', 'Patient ID', 'Identification', 'String', { ...ID, desc: 'Medical record number. Count Distinct gives the number of patients.' });
+f(1, 'FullName', 'Patient Name', 'Identification', 'String', { ...NAME, computed: true, desc: 'First and last name, calculated in the data set' });
+f(1, 'Gender', 'Gender', 'Demographics', 'String', { ...CAT, desc: 'Male or Female, as registered' });
+f(1, 'DateOfBirth', 'Date of Birth', 'Demographics', 'Date', { aggs: ['Min', 'Max'], desc: 'As recorded at registration' });
+f(1, 'Age', 'Age (Years)', 'Demographics', 'Number', { ...MEASURE, computed: true, groupable: true, desc: 'Whole years from date of birth, calculated when the report runs' });
+f(1, 'Nationality', 'Nationality', 'Demographics', 'String', { ...CAT, desc: 'Readable name from the nationality master' });
+f(1, 'MobileNo', 'Mobile No', 'Contact', 'String', { ...NAME, restricted: true, desc: 'Restricted: exporting asks for a reason' });
+f(1, 'City', 'City', 'Contact', 'String', { ...CAT, desc: 'City of the registered address' });
+f(1, 'PatientType', 'Patient Type', 'Registration', 'String', { ...CAT, desc: 'Cash, Insurance or Corporate' });
+f(1, 'RegistrationDate', 'Registration Date', 'Registration', 'Date', { ...DATE, desc: 'Date the patient was first registered' });
+f(1, 'RegisteredBy', 'Registered By', 'Registration', 'String', { ...CAT, desc: 'Front-desk user who registered the patient' });
+f(1, 'IsVip', 'VIP', 'Registration', 'Boolean', { ...CAT, desc: 'Yes when the patient is flagged as VIP' });
 // 2 Patient Visits
-f(2, 'VisitNo', 'Visit No', 'Identification', 'String');
-f(2, 'PatientId', 'Patient ID', 'Identification', 'String');
-f(2, 'VisitDate', 'Visit Date', 'Visit', 'Date');
-f(2, 'VisitType', 'Visit Type', 'Visit', 'String');
-f(2, 'Department', 'Department', 'Visit', 'String');
-f(2, 'Doctor', 'Doctor', 'Visit', 'String');
-f(2, 'VisitStatus', 'Visit Status', 'Status', 'String');
-f(2, 'WaitMinutes', 'Wait Time (min)', 'Service', 'Number', { desc: 'Check-in to consultation' });
-f(2, 'ConsultationFee', 'Consultation Fee', 'Financial', 'Number');
+f(2, 'VisitNo', 'Visit No', 'Identification', 'String', { ...ID, desc: 'Outpatient visit reference' });
+f(2, 'PatientId', 'Patient ID', 'Identification', 'String', { ...ID, desc: 'Medical record number. Count Distinct gives the number of patients.' });
+f(2, 'VisitDate', 'Visit Date', 'Visit', 'Date', { ...DATE, desc: 'Date of the visit' });
+f(2, 'VisitType', 'Visit Type', 'Visit', 'String', { ...CAT, desc: 'New, Review, Referral or Emergency' });
+f(2, 'Department', 'Department', 'Visit', 'String', { ...CAT, desc: 'Department the visit was booked in' });
+f(2, 'Doctor', 'Doctor', 'Visit', 'String', { ...CAT, desc: 'Consulting doctor, by name' });
+f(2, 'VisitStatus', 'Visit Status', 'Status', 'String', { ...CAT, desc: 'Checked-in, Consulted, Cancelled or No-show' });
+f(2, 'WaitMinutes', 'Wait Time (min)', 'Service', 'Number', { ...MEASURE, desc: 'Minutes from check-in to consultation' });
+f(2, 'ConsultationFee', 'Consultation Fee', 'Financial', 'Number', { ...MONEY, desc: 'Fee charged for the consultation' });
 // 3 Patient Bills
-f(3, 'BillNo', 'Bill No', 'Identification', 'String');
-f(3, 'PatientId', 'Patient ID', 'Identification', 'String');
-f(3, 'VisitNo', 'Visit No', 'Identification', 'String');
-f(3, 'BillDate', 'Bill Date', 'Bill', 'Date');
-f(3, 'BillType', 'Bill Type', 'Bill', 'String');
-f(3, 'Department', 'Department', 'Bill', 'String');
-f(3, 'Sponsor', 'Sponsor', 'Sponsor', 'String');
-f(3, 'GrossAmount', 'Gross Amount', 'Financial', 'Number');
-f(3, 'Discount', 'Discount', 'Financial', 'Number');
-f(3, 'NetAmount', 'Net Amount', 'Financial', 'Number');
-f(3, 'PatientShare', 'Patient Share', 'Financial', 'Number');
-f(3, 'SponsorShare', 'Sponsor Share', 'Financial', 'Number');
-f(3, 'BillStatus', 'Bill Status', 'Status', 'String');
+f(3, 'BillNo', 'Bill No', 'Identification', 'String', { ...ID, desc: 'Bill reference. Count gives the number of bills.' });
+f(3, 'PatientId', 'Patient ID', 'Identification', 'String', { ...ID, desc: 'Medical record number. Count Distinct gives the number of patients.' });
+f(3, 'VisitNo', 'Visit No', 'Identification', 'String', { ...ID, desc: 'Visit the bill belongs to' });
+f(3, 'BillDate', 'Bill Date', 'Bill', 'Date', { ...DATE, desc: 'Date the bill was raised' });
+f(3, 'BillType', 'Bill Type', 'Bill', 'String', { ...CAT, desc: 'OP, IP or Pharmacy' });
+f(3, 'Department', 'Department', 'Bill', 'String', { ...CAT, desc: 'Department the bill was raised in' });
+f(3, 'Sponsor', 'Sponsor', 'Sponsor', 'String', { ...CAT, desc: 'Paying sponsor, or Self Pay' });
+f(3, 'GrossAmount', 'Gross Amount', 'Financial', 'Number', { ...MONEY, desc: 'Before discount' });
+f(3, 'Discount', 'Discount', 'Financial', 'Number', { ...MONEY, desc: 'Discount given on the bill' });
+f(3, 'NetAmount', 'Net Amount', 'Financial', 'Number', { ...MONEY, desc: 'Gross amount less discount' });
+f(3, 'PatientShare', 'Patient Share', 'Financial', 'Number', { ...MONEY, desc: 'Part of the net amount the patient pays' });
+f(3, 'SponsorShare', 'Sponsor Share', 'Financial', 'Number', { ...MONEY, desc: 'Part of the net amount the sponsor pays' });
+f(3, 'BillStatus', 'Bill Status', 'Status', 'String', { ...CAT, desc: 'Paid, Part Paid, Unpaid or Cancelled' });
 // 4 Receipts
-f(4, 'ReceiptNo', 'Receipt No', 'Identification', 'String');
-f(4, 'BillNo', 'Bill No', 'Identification', 'String');
-f(4, 'ReceiptDate', 'Receipt Date', 'Receipt', 'Date');
-f(4, 'PaymentMode', 'Payment Mode', 'Receipt', 'String');
-f(4, 'Amount', 'Amount Received', 'Financial', 'Number');
-f(4, 'Cashier', 'Cashier', 'Receipt', 'String');
+f(4, 'ReceiptNo', 'Receipt No', 'Identification', 'String', { ...ID, desc: 'Receipt reference. Count gives the number of receipts.' });
+f(4, 'BillNo', 'Bill No', 'Identification', 'String', { ...ID, desc: 'Bill the receipt was taken against' });
+f(4, 'ReceiptDate', 'Receipt Date', 'Receipt', 'Date', { ...DATE, desc: 'Date the payment was received' });
+f(4, 'PaymentMode', 'Payment Mode', 'Receipt', 'String', { ...CAT, desc: 'Cash, Card, BenefitPay or Cheque' });
+f(4, 'Amount', 'Amount Received', 'Financial', 'Number', { ...MONEY, desc: 'Amount received on this receipt' });
+f(4, 'Cashier', 'Cashier', 'Receipt', 'String', { ...CAT, desc: 'Cashier who took the payment' });
 // 5 Lab Orders
-f(5, 'OrderNo', 'Order No', 'Identification', 'String');
-f(5, 'PatientId', 'Patient ID', 'Identification', 'String');
-f(5, 'VisitNo', 'Visit No', 'Identification', 'String');
-f(5, 'OrderDate', 'Order Date', 'Order', 'Date');
-f(5, 'TestName', 'Test Name', 'Order', 'String');
-f(5, 'Section', 'Lab Section', 'Order', 'String');
-f(5, 'Priority', 'Priority', 'Order', 'String');
-f(5, 'SpecimenStatus', 'Specimen Status', 'Status', 'String');
-f(5, 'TatMinutes', 'Turnaround Time (min)', 'Service', 'Number', { desc: 'Collection to verified result' });
-f(5, 'IsCritical', 'Critical Result', 'Status', 'Boolean');
+f(5, 'OrderNo', 'Order No', 'Identification', 'String', { ...ID, desc: 'Lab order reference' });
+f(5, 'PatientId', 'Patient ID', 'Identification', 'String', { ...ID, desc: 'Medical record number. Count Distinct gives the number of patients.' });
+f(5, 'VisitNo', 'Visit No', 'Identification', 'String', { ...ID, desc: 'Visit the test was ordered in' });
+f(5, 'OrderDate', 'Order Date', 'Order', 'Date', { ...DATE, desc: 'Date the test was ordered' });
+f(5, 'TestName', 'Test Name', 'Order', 'String', { ...CAT, desc: 'Test as named in the lab catalogue' });
+f(5, 'Section', 'Lab Section', 'Order', 'String', { ...CAT, desc: 'Haematology, Biochemistry, Microbiology or Immunology' });
+f(5, 'Priority', 'Priority', 'Order', 'String', { ...CAT, desc: 'Routine, Urgent or STAT' });
+f(5, 'SpecimenStatus', 'Specimen Status', 'Status', 'String', { ...CAT, desc: 'Where the specimen is in its lifecycle' });
+f(5, 'TatMinutes', 'Turnaround Time (min)', 'Service', 'Number', { ...MEASURE, desc: 'Minutes from collection to verified result' });
+f(5, 'IsCritical', 'Critical Result', 'Status', 'Boolean', { ...CAT, desc: 'Yes when the result was flagged critical' });
 // 6 Admissions
-f(6, 'AdmissionNo', 'Admission No', 'Identification', 'String');
-f(6, 'PatientId', 'Patient ID', 'Identification', 'String');
-f(6, 'AdmissionDate', 'Admission Date', 'Admission', 'Date');
-f(6, 'DischargeDate', 'Discharge Date', 'Admission', 'Date');
-f(6, 'AdmissionType', 'Admission Type', 'Admission', 'String');
-f(6, 'Ward', 'Ward', 'Bed', 'String');
-f(6, 'BedCategory', 'Bed Category', 'Bed', 'String');
-f(6, 'AttendingDoctor', 'Attending Doctor', 'Admission', 'String');
-f(6, 'LengthOfStay', 'Length of Stay (days)', 'Admission', 'Number', { computed: true });
-f(6, 'AdmissionStatus', 'Admission Status', 'Status', 'String');
+f(6, 'AdmissionNo', 'Admission No', 'Identification', 'String', { ...ID, desc: 'Inpatient admission reference' });
+f(6, 'PatientId', 'Patient ID', 'Identification', 'String', { ...ID, desc: 'Medical record number. Count Distinct gives the number of patients.' });
+f(6, 'AdmissionDate', 'Admission Date', 'Admission', 'Date', { ...DATE, desc: 'Date the patient was admitted' });
+f(6, 'DischargeDate', 'Discharge Date', 'Admission', 'Date', { ...DATE, desc: 'Blank while the patient is still admitted' });
+f(6, 'AdmissionType', 'Admission Type', 'Admission', 'String', { ...CAT, desc: 'Elective or Emergency' });
+f(6, 'Ward', 'Ward', 'Bed', 'String', { ...CAT, desc: 'Ward of the current or last bed' });
+f(6, 'BedCategory', 'Bed Category', 'Bed', 'String', { ...CAT, desc: 'General, Semi-Private, Private or ICU' });
+f(6, 'AttendingDoctor', 'Attending Doctor', 'Admission', 'String', { ...CAT, desc: 'Doctor responsible for the admission' });
+f(6, 'LengthOfStay', 'Length of Stay (days)', 'Admission', 'Number', { ...COUNTABLE, computed: true, desc: 'Days admitted; to today while still admitted. Total gives bed-days.' });
+f(6, 'AdmissionStatus', 'Admission Status', 'Status', 'String', { ...CAT, desc: 'Admitted or Discharged' });
 // 7 Surgeries
-f(7, 'CaseNo', 'OT Case No', 'Identification', 'String');
-f(7, 'PatientId', 'Patient ID', 'Identification', 'String');
-f(7, 'AdmissionNo', 'Admission No', 'Identification', 'String');
-f(7, 'SurgeryDate', 'Surgery Date', 'Surgery', 'Date');
-f(7, 'Procedure', 'Procedure', 'Surgery', 'String');
-f(7, 'Theatre', 'Theatre', 'Surgery', 'String');
-f(7, 'Surgeon', 'Surgeon', 'Team', 'String');
-f(7, 'AnaesthesiaType', 'Anaesthesia Type', 'Team', 'String');
-f(7, 'DurationMinutes', 'Duration (min)', 'Surgery', 'Number');
-f(7, 'CaseStatus', 'Case Status', 'Status', 'String');
+f(7, 'CaseNo', 'OT Case No', 'Identification', 'String', { ...ID, desc: 'Operation theatre case reference' });
+f(7, 'PatientId', 'Patient ID', 'Identification', 'String', { ...ID, desc: 'Medical record number. Count Distinct gives the number of patients.' });
+f(7, 'AdmissionNo', 'Admission No', 'Identification', 'String', { ...ID, desc: 'Admission the surgery belongs to' });
+f(7, 'SurgeryDate', 'Surgery Date', 'Surgery', 'Date', { ...DATE, desc: 'Date of surgery' });
+f(7, 'Procedure', 'Procedure', 'Surgery', 'String', { ...CAT, desc: 'Procedure as named in the OT catalogue' });
+f(7, 'Theatre', 'Theatre', 'Surgery', 'String', { ...CAT, desc: 'Theatre the case was done in' });
+f(7, 'Surgeon', 'Surgeon', 'Team', 'String', { ...CAT, desc: 'Lead surgeon, by name' });
+f(7, 'AnaesthesiaType', 'Anaesthesia Type', 'Team', 'String', { ...CAT, desc: 'General, Spinal, Regional Block, Local or Sedation' });
+f(7, 'DurationMinutes', 'Duration (min)', 'Surgery', 'Number', { aggs: ['Sum', 'Avg', 'Min', 'Max'], kind: 'integer', groupable: false, desc: 'Minutes from incision to closure. Total gives theatre minutes.' });
+f(7, 'CaseStatus', 'Case Status', 'Status', 'String', { ...CAT, desc: 'Scheduled, Completed, Cancelled or Postponed' });
 // 8 Dispensing
-f(8, 'DispenseNo', 'Dispense No', 'Identification', 'String');
-f(8, 'PatientId', 'Patient ID', 'Identification', 'String');
-f(8, 'DispenseDate', 'Dispense Date', 'Dispense', 'Date');
-f(8, 'Store', 'Store', 'Dispense', 'String');
-f(8, 'DrugName', 'Drug Name', 'Item', 'String');
-f(8, 'DrugCategory', 'Drug Category', 'Item', 'String');
-f(8, 'Quantity', 'Quantity', 'Item', 'Number');
-f(8, 'Amount', 'Amount', 'Financial', 'Number');
-f(8, 'Pharmacist', 'Pharmacist', 'Dispense', 'String');
+f(8, 'DispenseNo', 'Dispense No', 'Identification', 'String', { ...ID, desc: 'Pharmacy dispense reference' });
+f(8, 'PatientId', 'Patient ID', 'Identification', 'String', { ...ID, desc: 'Medical record number. Count Distinct gives the number of patients.' });
+f(8, 'DispenseDate', 'Dispense Date', 'Dispense', 'Date', { ...DATE, desc: 'Date the item was dispensed' });
+f(8, 'Store', 'Store', 'Dispense', 'String', { ...CAT, desc: 'Pharmacy store that dispensed it' });
+f(8, 'DrugName', 'Drug Name', 'Item', 'String', { ...CAT, desc: 'Item as named in the formulary' });
+f(8, 'DrugCategory', 'Drug Category', 'Item', 'String', { ...CAT, desc: 'Therapeutic category' });
+f(8, 'Quantity', 'Quantity', 'Item', 'Number', { ...COUNTABLE, desc: 'Units dispensed' });
+f(8, 'Amount', 'Amount', 'Financial', 'Number', { ...MONEY, desc: 'Charge for the dispensed quantity' });
+f(8, 'Pharmacist', 'Pharmacist', 'Dispense', 'String', { ...CAT, desc: 'Pharmacist who dispensed it' });
 
 // Related, pre-resolved columns (PRD 5.2) — appended so earlier field ids stay stable
-f(1, 'LatestVisitDate', 'Latest Visit Date', 'Activity', 'Date', { related: true, desc: 'Derived from visit history' });
-f(1, 'VisitCount12m', 'Visit Count, 12 months', 'Activity', 'Number', { related: true, desc: 'Derived from visit history' });
-f(1, 'OutstandingBalance', 'Outstanding Balance', 'Activity', 'Number', { related: true, desc: 'Derived from billing' });
-f(3, 'SponsorCategory', 'Sponsor Category', 'Sponsor', 'String', { related: true, desc: 'From the sponsor master' });
+f(1, 'LatestVisitDate', 'Latest Visit Date', 'Activity', 'Date', { aggs: ['Min', 'Max'], related: true, desc: 'Derived from visit history' });
+f(1, 'VisitCount12m', 'Visit Count, 12 months', 'Activity', 'Number', { ...COUNTABLE, related: true, desc: 'Derived from visit history' });
+f(1, 'OutstandingBalance', 'Outstanding Balance', 'Activity', 'Number', { aggs: ['Sum', 'Avg', 'Max'], kind: 'money', groupable: false, related: true, desc: 'Derived from billing' });
+f(3, 'SponsorCategory', 'Sponsor Category', 'Sponsor', 'String', { ...CAT, related: true, desc: 'Insurance, Corporate or Cash, from the sponsor master' });
+
 
 export function fieldIdOf(entityId: number, sys: string): number {
   return FIELDS.find((x) => x.entityId === entityId && x.systemFieldName === sys)!.fieldId;

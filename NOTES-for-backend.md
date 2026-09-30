@@ -76,3 +76,14 @@ All of these are optional additions to the existing DTOs, so the current API kee
 | Column requests (9) | `POST /column-requests { moduleId, entityId, request }` → `{ reference }` | |
 | Exports (6.10) | client-side today | Excel follows 6.10.1 (built with ExcelJS). CSV has a Row Type column (Detail / Subtotal / Grand total). The **PDF** block (hospital, title, run time, user, filters, parameters, page numbers, summary rows kept with their group) is still server-side. |
 | Formats (6.3) | pattern `c2` | Currency and dates follow hospital settings (KD, 3 decimals; "29 Sep 2026"), in `shared/hospital-settings.ts` for now. |
+
+## 6. Updated PRD + review round: what the UI now expects
+
+- **Joins removed.** Data sets are report-shaped; related data arrives pre-resolved to one value per row (5.2). `relatedEntities` is no longer sent.
+- **Column metadata:** every column needs `description`, `allowedAggregations` (only what makes sense: Age → Avg/Min/Max, never Sum) and, for numbers, `numberKind: money | integer | decimal`. The builder offers formats from `numberKind` (currency only for money, whole numbers only for integers).
+- **Summaries need a grouping.** When the last grouping is removed, the UI clears every aggregate. Labels: Total, Average, Count, Count Distinct, Minimum, Maximum.
+- **`dataConfiguration` new fields:** `showGrandTotal` (default true), `groupsStart: auto | expanded | collapsed` (detail mode), `calculatedColumns[]`.
+- **Calculated columns (7.3):** `{ name, left, operation, right, decimals, formatPattern?, aggregate? }`, where an operand is `{kind:'column',fieldId}`, `{kind:'calc',name}` or `{kind:'value',value}`. Operations: add, subtract, multiply, divide, percentOf (a/b, a fraction), percentDiff ((a−b)/b). Limits: up to 5 columns, 3 levels of chaining, no circular references, and an operand can only use earlier calculated columns. An empty operand or division by zero gives an empty cell. **Divide and percent operations are recalculated from the operand totals** at every subtotal and at the grand total, never added up. The others use their `aggregate` (default Sum). The output column name is `name`, the row key is `calc:<name>`, and the display pattern is `formatPattern`, else `p{decimals}` for percents or `n{decimals}`.
+- **Layout saved per report (7.2):** `columnLayout: { widths: {label: px}, nowrap: [labels], pinned: [≤2 labels] }`. Hiding a column and Find are view-only and never saved.
+- **Group limit:** 1,000 groups (was 100); beyond that, return `TOO_MANY_GROUPS`.
+- **PDF page fit (7.4.3):** the builder estimates widths at 22mm for numbers and dates, 20mm for codes, 25mm for short text and 40mm for names, against 180mm portrait or 267mm landscape. It warns but doesn't block; the server PDF should shrink the text rather than cut columns.

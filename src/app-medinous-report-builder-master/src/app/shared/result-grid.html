@@ -1,4 +1,4 @@
-<div class="fx-rg" [class.fx-stale]="stale()">
+<div class="fx-rg" [class.fx-stale]="stale()" [class.compact]="density() === 'compact'" (click)="closeMenu()">
   <div class="fx-rg-bar">
     <span class="fx-rg-count">
       @if (result().totalCount) {
@@ -11,30 +11,61 @@
       <button class="fx-link" (click)="expandAll(true)"><mat-icon>unfold_more</mat-icon>Expand all</button>
       <button class="fx-link" (click)="expandAll(false)"><mat-icon>unfold_less</mat-icon>Collapse all</button>
     }
-    <label class="fx-check inline fx-rg-wrap"><input type="checkbox" [checked]="wrap()" (change)="wrap.set(!wrap())" /> Wrap text</label>
-    <div class="fx-search fx-rg-search">
-      <mat-icon>search</mat-icon>
-      <input placeholder="Search results" [ngModel]="search()" (ngModelChange)="search.set($event)" aria-label="Search in results" />
+    <button class="fx-link" (click)="resetWidths()" matTooltip="Return every column to its calculated width"><mat-icon>width_normal</mat-icon>Reset column widths</button>
+    <div class="fx-seg sm" role="group" aria-label="Row density">
+      <button [class.on]="density() === 'comfortable'" (click)="setDensity('comfortable')">Comfortable</button>
+      <button [class.on]="density() === 'compact'" (click)="setDensity('compact')">Compact</button>
     </div>
   </div>
 
+  <div class="fx-rg-bar fx-rg-find">
+    <div class="fx-search fx-rg-search">
+      <mat-icon>search</mat-icon>
+      <input placeholder="Find in results" [ngModel]="find()" (ngModelChange)="find.set($event)" aria-label="Find in results" />
+    </div>
+    @if (find().trim()) {
+      <span class="fx-rg-meta"><b>{{ matchCount() | number }}</b> matching {{ matchCount() === 1 ? 'row' : 'rows' }}</span>
+      <label class="fx-check inline"><input type="checkbox" [checked]="matchingOnly()" (change)="matchingOnly.set(!matchingOnly())" /> Show matching rows only</label>
+    }
+    @if (hidden().size) {
+      <span class="spacer"></span>
+      <span class="fx-rg-meta">{{ hidden().size }} {{ hidden().size === 1 ? 'column' : 'columns' }} hidden from view</span>
+      <button class="fx-link" (click)="showAll()">Show all</button>
+    }
+  </div>
+  @if (find().trim() && matchingOnly()) {
+    <div class="fx-notice fx-rg-note" role="status"><mat-icon>filter_alt</mat-icon>
+      <span>Showing matching rows only. Totals and subtotals still reflect the full result, so they won't add up to the rows on screen.</span></div>
+  }
   @if (result().truncated) {
     <div class="fx-total-note">Only the first {{ result().data.length | number }} rows are shown; add filters for a complete result.</div>
   }
-  @if (search()) {
-    <div class="fx-hint fx-rg-note">Search narrows the rows on screen. Totals still cover the whole result.</div>
-  }
 
   <div class="fx-grid-wrap">
-    <table class="fx-grid" [class.fx-wrap]="wrap()">
+    <table class="fx-grid fx-rg-table">
       <thead>
         <tr>
-          @if (detailMode()) { <th class="fx-rg-tog"></th> }
-          <th class="rownum">#</th>
-          @for (col of columns(); track col) {
-            <th [style.width.px]="widths()[col]" [style.min-width.px]="widths()[col]">
-              {{ col }}
-              <span class="fx-rg-resize" (mousedown)="startResize($event, col)" title="Drag to resize"></span>
+          @if (detailMode()) { <th class="fx-rg-tog fx-pin" style="left: 0"></th> }
+          <th class="rownum fx-pin" [style.left.px]="detailMode() ? 30 : 0">#</th>
+          @for (col of viewCols(); track col) {
+            <th [style.width.px]="width(col)" [style.min-width.px]="width(col)" [style.max-width.px]="width(col)"
+                [class]="'k-' + kinds()[col]" [class.fx-pin]="isPinned(col)" [class.fx-pin-last]="lastPinned(col)"
+                [style.left.px]="isPinned(col) ? pinLeft(col) : null">
+              <span class="fx-rg-th">
+                @if (isPinned(col)) { <mat-icon class="fx-rg-pinicon">push_pin</mat-icon> }
+                <span class="fx-rg-thtext">{{ col }}</span>
+                <button class="fx-rg-menu-btn" (click)="toggleMenu(col, $event)" [attr.aria-label]="'Options for ' + col"><mat-icon>more_vert</mat-icon></button>
+              </span>
+              @if (menuCol() === col) {
+                <div class="fx-rg-menu" role="menu" (click)="$event.stopPropagation()">
+                  <button role="menuitem" (click)="toggleWrap(col)"><mat-icon>{{ nowrap().has(col) ? 'check_box_outline_blank' : 'check_box' }}</mat-icon>Wrap text</button>
+                  <button role="menuitem" (click)="togglePin(col)" [disabled]="!canPin(col)" [matTooltip]="canPin(col) ? '' : 'Up to two columns can be pinned'">
+                    <mat-icon>push_pin</mat-icon>{{ pinned().includes(col) ? 'Unpin' : 'Pin to the left' }}</button>
+                  <button role="menuitem" (click)="fit(col)"><mat-icon>fit_width</mat-icon>Fit to content</button>
+                  <button role="menuitem" (click)="hide(col)"><mat-icon>visibility_off</mat-icon>Hide from view</button>
+                </div>
+              }
+              <span class="fx-rg-resize" (mousedown)="startResize($event, col)" (dblclick)="fit(col)" title="Drag to resize · double-click to fit"></span>
             </th>
           }
         </tr>
@@ -45,11 +76,14 @@
             @case ('detail') {
               @if (item.kind === 'detail') {
                 <tr [class.fx-rg-cont]="item.continued">
-                  @if (detailMode()) { <td class="fx-rg-tog"></td> }
-                  <td class="rownum">{{ item.index + 1 }}</td>
-                  @for (col of columns(); track col) {
-                    <td [ngStyle]="style(item.row[col], col, 'detail')" [class.num]="isNum(item.row[col])" [class.drillable]="drillFor(col)"
-                        (click)="drillFor(col) && drill.emit({ row: item.row, col })">{{ format(item.row[col], col) }}</td>
+                  @if (detailMode()) { <td class="fx-rg-tog fx-pin" style="left: 0"></td> }
+                  <td class="rownum fx-pin" [style.left.px]="detailMode() ? 30 : 0">{{ item.index + 1 }}</td>
+                  @for (col of viewCols(); track col) {
+                    <td [ngStyle]="style(item.row[col], col, 'detail')" [class]="'k-' + kinds()[col]"
+                        [class.nowrap]="nowrap().has(col)" [class.drillable]="drillFor(col)"
+                        [class.fx-pin]="isPinned(col)" [class.fx-pin-last]="lastPinned(col)" [style.left.px]="isPinned(col) ? pinLeft(col) : null"
+                        [style.max-width.px]="width(col)" [attr.title]="nowrap().has(col) ? format(item.row[col], col) : null"
+                        (click)="drillFor(col) && drill.emit({ row: item.row, col })" [innerHTML]="html(item.row[col], col)"></td>
                   }
                 </tr>
               }
@@ -57,18 +91,20 @@
             @case ('summary') {
               @if (item.kind === 'summary') {
                 <tr class="fx-rg-sum" (click)="toggle(item.group)">
-                  <td class="fx-rg-tog">
+                  <td class="fx-rg-tog fx-pin" style="left: 0">
                     <button class="fx-rg-tbtn" [attr.aria-expanded]="expanded().has(item.group)"
                             [attr.aria-label]="(expanded().has(item.group) ? 'Collapse ' : 'Expand ') + groupLabel(item.group)">
                       <mat-icon>{{ expanded().has(item.group) ? 'expand_more' : 'chevron_right' }}</mat-icon>
                     </button>
                   </td>
-                  <td class="rownum"></td>
-                  @for (col of columns(); track col; let c = $index) {
+                  <td class="rownum fx-pin" style="left: 30px"></td>
+                  @for (col of viewCols(); track col; let c = $index) {
                     @if (c === 0) {
-                      <td class="fx-rg-glabel">{{ groupLabel(item.group) }} <small>subtotal · {{ summaryOf(item.group).rowCount | number }} {{ summaryOf(item.group).rowCount === 1 ? "row" : "rows" }}</small></td>
+                      <td class="fx-rg-glabel" [class.fx-pin]="isPinned(col)" [style.left.px]="isPinned(col) ? pinLeft(col) : null">
+                        {{ groupLabel(item.group) }} <small>subtotal · {{ summaryOf(item.group).rowCount | number }} {{ summaryOf(item.group).rowCount === 1 ? 'row' : 'rows' }}</small></td>
                     } @else {
-                      <td [ngStyle]="style(summaryOf(item.group).summary[col], col, 'summary')" class="num">{{ summaryCell(item.group, col) }}</td>
+                      <td [ngStyle]="style(summaryOf(item.group).summary[col], col, 'summary')" [class]="'k-' + kinds()[col]"
+                          [class.fx-pin]="isPinned(col)" [style.left.px]="isPinned(col) ? pinLeft(col) : null">{{ summaryCell(item.group, col) }}</td>
                     }
                   }
                 </tr>
@@ -76,13 +112,14 @@
             }
             @case ('grand') {
               <tr class="fx-rg-grand">
-                @if (detailMode()) { <td class="fx-rg-tog"></td> }
-                <td class="rownum total-label">Total</td>
-                @for (col of columns(); track col; let c = $index) {
+                @if (detailMode()) { <td class="fx-rg-tog fx-pin" style="left: 0"></td> }
+                <td class="rownum total-label fx-pin" [style.left.px]="detailMode() ? 30 : 0">Total</td>
+                @for (col of viewCols(); track col; let c = $index) {
                   @if (grand()?.[col]; as g) {
-                    <td class="num" [ngStyle]="style(g.value, col, 'summary')" [matTooltip]="g.note || ''">{{ g.value === null ? '—' : format(g.value, col) }}</td>
+                    <td [class]="'k-' + kinds()[col]" [ngStyle]="style(g.value, col, 'summary')" [matTooltip]="g.note || ''"
+                        [class.fx-pin]="isPinned(col)" [style.left.px]="isPinned(col) ? pinLeft(col) : null">{{ g.value === null ? '—' : format(g.value, col) }}</td>
                   } @else {
-                    <td>{{ c === 0 && detailMode() ? 'Grand total' : '' }}</td>
+                    <td [class.fx-pin]="isPinned(col)" [style.left.px]="isPinned(col) ? pinLeft(col) : null">{{ c === 0 && detailMode() ? 'Grand total' : '' }}</td>
                   }
                 }
               </tr>
@@ -90,8 +127,8 @@
           }
         }
         @if (!pageRows().length) {
-          <tr><td [attr.colspan]="columns().length + 2" class="fx-grid-empty">
-            {{ search() ? 'No rows on screen match your search.' : 'No records match the selected criteria.' }}
+          <tr><td [attr.colspan]="viewCols().length + 2" class="fx-grid-empty">
+            {{ find().trim() && matchingOnly() ? 'No rows match your search.' : 'No records match the selected criteria.' }}
           </td></tr>
         }
       </tbody>

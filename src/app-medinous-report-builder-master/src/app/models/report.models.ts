@@ -37,6 +37,8 @@ export interface ReportField {
   isRelated?: boolean;
   /** PRD 6.3: restricted column (mobile, passport…). Absent for users without permission; export asks for a reason. */
   isRestricted?: boolean;
+  /** Numbers only: decides which formats and summaries make sense (no currency on Age). */
+  numberKind?: 'money' | 'integer' | 'decimal';
   allowedAggregations: string[];
 }
 
@@ -94,6 +96,31 @@ export interface PaginationConfigDto {
   pageSize: number;
 }
 
+/** One side of a calculation: a number column in the report, another calculated column, or a typed number. */
+export type CalcOperand = { kind: 'column'; fieldId: number } | { kind: 'calc'; name: string } | { kind: 'value'; value: number };
+
+export type CalcOperation = 'add' | 'subtract' | 'multiply' | 'divide' | 'percentOf' | 'percentDiff';
+
+export interface CalculatedColumnDto {
+  name: string;
+  left: CalcOperand;
+  operation: CalcOperation;
+  right: CalcOperand;
+  decimals: number;
+  formatPattern?: string;
+  /** Summary in grouped reports: Sum/Avg/Min/Max. Divide and percent columns are always recalculated from group totals (PRD 7.3.4). */
+  aggregate?: string;
+}
+
+export const CALC_OPERATIONS: { value: CalcOperation; label: string; symbol: string }[] = [
+  { value: 'add', label: 'Add', symbol: '+' },
+  { value: 'subtract', label: 'Subtract', symbol: '−' },
+  { value: 'multiply', label: 'Multiply', symbol: '×' },
+  { value: 'divide', label: 'Divide', symbol: '÷' },
+  { value: 'percentOf', label: 'Percent of', symbol: '% of' },
+  { value: 'percentDiff', label: 'Percent difference', symbol: '% diff' },
+];
+
 export interface DataConfigurationDto {
   primaryEntityId: number;
   relatedEntities?: RelatedEntityDto[];
@@ -107,6 +134,11 @@ export interface DataConfigurationDto {
   pagination?: PaginationConfigDto;
   /** PRD 6.5: 'summary' = one row per group; 'detail' = detail rows with a summary under each group and a grand total. */
   groupingMode?: 'summary' | 'detail';
+  /** PRD 6.5 */
+  showGrandTotal?: boolean;
+  groupsStart?: 'auto' | 'expanded' | 'collapsed';
+  /** PRD 7.3: up to five calculated columns, computed on the server alongside the rows */
+  calculatedColumns?: CalculatedColumnDto[];
 }
 
 export interface ChartExportConfig {
@@ -183,6 +215,8 @@ export interface ReportConfigurationDto {
   visualizations?: VisualizationConfig[];
   layout?: LayoutConfig;
   drillThrough?: DrillThroughConfig[];
+  /** PRD 7.2: widths, wrapping and pinned columns are saved with the report so readers see the author's arrangement */
+  columnLayout?: { widths?: Record<string, number>; nowrap?: string[]; pinned?: string[] };
   dataConfiguration: DataConfigurationDto;
 }
 
@@ -319,14 +353,15 @@ export const RELATIVE_DATE_PRESETS: { label: string; value: { unit: string; offs
   { label: 'Last year', value: { unit: 'year', offset: -1, anchor: 'start' } },
 ];
 
+/** PRD 6.5 wording: hospital staff read "Total", not "SUM". Values stay as the API expects. */
 export const AGGREGATION_OPTIONS = [
-  { value: '', label: 'None' },
-  { value: 'Count', label: 'COUNT' },
-  { value: 'Sum', label: 'SUM' },
-  { value: 'Avg', label: 'AVG' },
-  { value: 'Min', label: 'MIN' },
-  { value: 'Max', label: 'MAX' },
-  { value: 'CountDistinct', label: 'COUNT DISTINCT' },
+  { value: '', label: 'No summary' },
+  { value: 'Sum', label: 'Total' },
+  { value: 'Avg', label: 'Average' },
+  { value: 'Count', label: 'Count' },
+  { value: 'CountDistinct', label: 'Count Distinct' },
+  { value: 'Min', label: 'Minimum' },
+  { value: 'Max', label: 'Maximum' },
 ];
 
 export const FORMAT_OPTIONS: { value: string; label: string; dataTypes: string[] }[] = [

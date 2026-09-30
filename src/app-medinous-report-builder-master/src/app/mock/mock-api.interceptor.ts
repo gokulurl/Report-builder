@@ -271,6 +271,26 @@ function runQuery(config: ReportConfigurationDto) {
 
   rows = rows.filter((r) => matchGroup(r, dc.filterGroup, (row, id) => row[id]));
 
+  // ---- PRD 7.3 calculated columns: full precision per row; empty operand or ÷0 gives empty ----
+  const calcs = dc.calculatedColumns || [];
+  const opKey = (o: any) => (o.kind === 'column' ? o.fieldId : o.kind === 'calc' ? 'calc:' + o.name : null);
+  const apply = (op: string, a: any, b: any) => {
+    if (a == null || b == null || a === '' || b === '') return null;
+    const x = Number(a), y = Number(b);
+    switch (op) {
+      case 'add': return x + y;
+      case 'subtract': return x - y;
+      case 'multiply': return x * y;
+      case 'divide': return y === 0 ? null : x / y;
+      case 'percentOf': return y === 0 ? null : x / y;
+      case 'percentDiff': return y === 0 ? null : (x - y) / y;
+      default: return null;
+    }
+  };
+  const operand = (row: any, o: any) => (o.kind === 'value' ? o.value : row[opKey(o)]);
+  for (const r of rows as any[]) for (const c of calcs) r['calc:' + c.name] = apply(c.operation, operand(r, c.left), operand(r, c.right));
+  const RECALC = new Set(['divide', 'percentOf', 'percentDiff']);
+
   const cols = [
     ...dc.selectedFields.map((s) => ({ ...s })),
     ...(dc.relatedEntities || []).flatMap((re) => re.selectedFields),
@@ -288,14 +308,34 @@ function runQuery(config: ReportConfigurationDto) {
       default: return undefined;
     }
   };
+  // Calculated columns follow the base columns; in grouped reports they carry a summary
+  const grouped = (dc.groupings?.length ?? 0) > 0;
+  for (const c of calcs) (cols as any[]).push({ fieldId: 'calc:' + c.name, label: c.name, aggregate: grouped ? (RECALC.has(c.operation) ? 'Recalc' : c.aggregate || 'Sum') : undefined, calc: c });
   const summarised = cols.filter((c) => c.aggregate);
   const toLabels = (r: Row) => { const o: Record<string, any> = {}; for (const c of cols) o[c.label] = r[c.fieldId]; return o; };
   const cmp = (a: any, b: any) => (a == null ? 1 : b == null ? -1 : a < b ? -1 : a > b ? 1 : 0);
-  const MAX_GROUPS = 100;
+  const MAX_GROUPS = 1000;
+
+  /**
+   * One summary value over a set of rows. Divide and percent calculations are recalculated from the group's operand
+   * totals, not averaged from the row results (PRD 7.3.4): 105 / 1,010 = 10.4%, not the 30% an average would give.
+   */
+  const summ = (subset: any[], c: any): any => {
+    if (c.calc && RECALC.has(c.calc.operation)) {
+      const total = (o: any) => {
+        if (o.kind === 'value') return o.value;
+        if (o.kind === 'calc') { const cc = (cols as any[]).find((x) => x.label === o.name && x.calc); return cc ? summ(subset, cc) : null; }
+        const col = (cols as any[]).find((x) => x.fieldId === o.fieldId && !x.calc);
+        return agg(subset.map((r) => r[o.fieldId]), col?.aggregate && col.aggregate !== 'Count' && col.aggregate !== 'CountDistinct' ? col.aggregate : 'Sum');
+      };
+      return apply(c.calc.operation, total(c.calc.left), total(c.calc.right));
+    }
+    return agg(subset.map((r) => r[c.fieldId]), c.aggregate);
+  };
 
   // Grand total over every filtered row, in the same pass (PRD 6.5) — correct for AVG and COUNT DISTINCT too.
   const grandTotal: Record<string, any> = {};
-  for (const c of summarised) grandTotal[c.label] = agg(rows.map((r) => r[c.fieldId]), c.aggregate);
+  for (const c of summarised) grandTotal[c.label] = summ(rows, c);
 
   const groupIds = dc.groupings?.length ? dc.groupings : [];
   const keyOf = (r: Row) => JSON.stringify(groupIds.map((id) => r[id]));
@@ -329,9 +369,9 @@ function runQuery(config: ReportConfigurationDto) {
     if (groups.length > MAX_GROUPS) throw { code: 'TOO_MANY_GROUPS' };
     for (const g of groups) {
       const slice = detail.slice(g.start, g.start + g.rowCount);
-      for (const c of summarised) g.summary[c.label] = agg(slice.map((r) => r[c.fieldId]), c.aggregate);
+      for (const c of summarised) g.summary[c.label] = summ(slice, c);
     }
-    if (dc.topN) for (const c of summarised) grandTotal[c.label] = agg(detail.map((r) => r[c.fieldId]), c.aggregate);
+    if (dc.topN) for (const c of summarised) grandTotal[c.label] = summ(detail, c);
     const data = detail.slice(0, 1000).map(toLabels);
     return {
       data, totalCount: detail.length, page: 1, pageSize: data.length,
@@ -355,7 +395,7 @@ function runQuery(config: ReportConfigurationDto) {
     if (groupIds.length && map.size > MAX_GROUPS) throw { code: 'TOO_MANY_GROUPS' };
     out = [...map.values()].map((g) => {
       const o: Row = {};
-      for (const c of cols) o[c.fieldId] = c.aggregate ? agg(g.map((r) => r[c.fieldId]), c.aggregate) : g[0][c.fieldId];
+      for (const c of cols) (o as any)[c.fieldId] = c.aggregate ? summ(g, c) : (g[0] as any)[c.fieldId];
       return o;
     });
     out = out.filter((r) => matchGroup(r, dc.having, (row, id) => row[id]));

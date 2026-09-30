@@ -197,6 +197,7 @@ export class ReportRun implements OnDestroy {
 
   private load(id: string, pubId: string | null) {
     this.reset();
+    this.drillFrom.set((history.state?.from as string) || null);
     const linked = (history.state?.params as Record<string, any> | undefined) || undefined;
     const ready = history.state?.result as PreviewResponse | undefined;
     const readyWith = history.state?.ranWith as { label: string; value: string }[] | undefined;
@@ -466,7 +467,14 @@ export class ReportRun implements OnDestroy {
     if (!d) return;
     const params: Record<string, any> = {};
     for (const m of d.parameterMappings) params[m.targetParamId] = e.row[m.sourceColumn];
-    this.router.navigate(['/reports', d.targetReportId], { state: { params } });
+    this.router.navigate(['/reports', d.targetReportId], { state: { params, from: this.report()?.name || 'previous report' } });
+  }
+
+  /** PRD: after drill-through, the way back names the report the user came from. */
+  drillFrom = signal<string | null>(null);
+  back() {
+    if (this.drillFrom()) history.back();
+    else this.router.navigate(['/reports']);
   }
 
   // ---------- exports (PRD 6.10): complete result, criteria line, restricted-column reason ----------

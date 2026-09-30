@@ -29,14 +29,13 @@ export class ExportService {
   private numFmt(pattern: string | undefined, isDate: boolean): string | undefined {
     const cur = `"${HOSPITAL.currency}" `;
     const dec = '0'.repeat(HOSPITAL.currencyDecimals);
+    const m = /^([ncp])(\d)$/.exec(pattern || '');
+    if (m) {
+      const d = pattern === 'c2' ? dec.length : Number(m[2]);
+      const frac = d ? '.' + '0'.repeat(d) : '';
+      return m[1] === 'n' ? '#,##0' + frac : m[1] === 'p' ? '0' + frac + '%' : cur + '#,##0' + frac;
+    }
     switch (pattern) {
-      case 'n0': return '#,##0';
-      case 'n2': return '#,##0.00';
-      case 'n3': case 'n4': return '#,##0.000';
-      case 'c0': return cur + '#,##0';
-      case 'c2': return `${cur}#,##0.${dec}`;
-      case 'p0': return '0%';
-      case 'p2': return '0.00%';
       case 'short': return 'dd/mm/yyyy';
       case 'long': return 'dd mmmm yyyy';
       case 'iso': return 'yyyy-mm-dd';

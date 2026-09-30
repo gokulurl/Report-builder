@@ -14,7 +14,7 @@ import { ChartConfiguration, ChartType } from 'chart.js';
 import { ReportApiService } from '../services/report-api.service';
 import { ExportService, ReportExport } from '../services/export.service';
 import { ResultGrid } from '../shared/result-grid';
-import { formatValue, summaryLabel, validateFilterValue, validateParamId, toReportError, displayDate, MAX_CHART_CATEGORIES } from '../shared/report-format';
+import { calcFormat, formatValue, summaryLabel, validateFilterValue, validateParamId, toReportError, displayDate, MAX_CHART_CATEGORIES } from '../shared/report-format';
 import { HOSPITAL, mediumDateTime } from '../shared/hospital-settings';
 import {
   ReportModule,
@@ -46,6 +46,10 @@ import {
   AppUser,
   ReportVersionDto,
   ReportError,
+  CalculatedColumnDto,
+  CalcOperand,
+  CalcOperation,
+  CALC_OPERATIONS,
 } from '../models/report.models';
 
 interface FieldSelection {
@@ -128,8 +132,27 @@ export class ReportBuilder {
   }
   fieldSearch = signal('');
 
-  // PRD 6.5 grouping mode
+  // PRD 6.5 grouping mode and options
   groupingMode = signal<'summary' | 'detail'>('summary');
+  showGrandTotal = signal(true);
+  groupsStart = signal<'auto' | 'expanded' | 'collapsed'>('auto');
+  // PRD 7.2 layout saved with the report
+  columnLayout = signal<{ widths?: Record<string, number>; nowrap?: string[]; pinned?: string[] }>({});
+  // PRD 7.3 calculated columns
+  calcs = signal<CalculatedColumnDto[]>([]);
+  calcEditing = signal<number | null>(null); // index being edited, -1 = new
+  calcName = signal('');
+  calcLeft = signal<string>(''); // 'f:<id>' | 'c:<name>' | 'v'
+  calcLeftValue = signal('');
+  calcOp = signal<CalcOperation>('add');
+  calcRight = signal<string>('');
+  calcRightValue = signal('');
+  calcDecimals = signal(2);
+  calcFormatSel = signal('');
+  calcAgg = signal('Sum');
+  calcTouched = signal(false);
+  readonly CALC_OPERATIONS = CALC_OPERATIONS;
+  readonly MAX_CALCS = 5;
   // PRD 6.8: a run keeps its result on screen; later changes mark it out of date instead of re-running
   runAt = signal<Date | null>(null);
   stale = signal(false);
@@ -449,11 +472,12 @@ export class ReportBuilder {
   toggleFieldGrouped(fieldId: number) {
     const fs = this.fieldSelections().find((f) => f.field.fieldId === fieldId);
     if (fs && !fs.grouped && this.groupedCount() >= MAX_GROUP_LEVELS) return;
-    this.fieldSelections.update((fields) =>
-      fields.map((f) =>
-        f.field.fieldId === fieldId ? { ...f, grouped: !f.grouped } : f
-      )
-    );
+    this.fieldSelections.update((fields) => {
+      const next = fields.map((f) => (f.field.fieldId === fieldId ? { ...f, grouped: !f.grouped, aggregate: '' } : f));
+      // PRD 6.5: summaries only exist while something is grouped
+      return next.some((f) => f.selected && f.grouped) ? next : next.map((f) => ({ ...f, aggregate: '' }));
+    });
+    this.markEdited();
   }
 
   setFieldFormatPattern(fieldId: number, pattern: string) {
@@ -464,8 +488,201 @@ export class ReportBuilder {
     );
   }
 
-  getFormatOptionsForField(dataType: string) {
-    return FORMAT_OPTIONS.filter((o) => o.dataTypes.includes(dataType));
+  /** Only formats that fit the column: money gets currency, whole numbers stay whole, dates get date formats. */
+  getFormatOptionsForField(field: ReportField) {
+    if (field.dataType !== 'Number') return FORMAT_OPTIONS.filter((o) => o.dataTypes.includes(field.dataType));
+    const allowed: Record<string, string[]> = {
+      money: ['', 'c2', 'c0', 'n3', 'n0'],
+      integer: ['', 'n0'],
+      decimal: ['', 'n0', 'n2', 'n3', 'p0', 'p2'],
+    };
+    const keep = allowed[field.numberKind || 'decimal'];
+    return FORMAT_OPTIONS.filter((o) => keep.includes(o.value));
+  }
+
+  // === Calculated columns (PRD 7.3) ===
+
+  /** Number columns in the report, plus calculated columns defined before the one being edited (no circular references). */
+  calcOperandOptions = computed(() => {
+    const idx = this.calcEditing();
+    const upTo = idx === null || idx < 0 ? this.calcs().length : idx;
+    return {
+      columns: this.selectedFields().filter((f) => f.field.dataType === 'Number'),
+      calcs: this.calcs().slice(0, upTo),
+    };
+  });
+
+  private operandFrom(sel: string, value: string): CalcOperand | null {
+    if (sel === 'v') return value.trim() !== '' && !isNaN(Number(value)) ? { kind: 'value', value: Number(value) } : null;
+    if (sel.startsWith('f:')) return { kind: 'column', fieldId: +sel.slice(2) };
+    if (sel.startsWith('c:')) return { kind: 'calc', name: sel.slice(2) };
+    return null;
+  }
+
+  private operandKey(o: CalcOperand) {
+    return o.kind === 'value' ? 'v' : o.kind === 'column' ? 'f:' + o.fieldId : 'c:' + o.name;
+  }
+
+  operandLabel(o: CalcOperand) {
+    if (o.kind === 'value') return String(o.value);
+    if (o.kind === 'calc') return o.name;
+    return this.fieldSelections().find((f) => f.field.fieldId === o.fieldId)?.field.displayLabel || 'Column ' + o.fieldId;
+  }
+
+  opLabel(op: CalcOperation) {
+    return CALC_OPERATIONS.find((o) => o.value === op)?.symbol || op;
+  }
+
+  private depth(c: CalculatedColumnDto, seen = new Set<string>()): number {
+    if (seen.has(c.name)) return 99; // circular
+    seen.add(c.name);
+    let d = 1;
+    for (const o of [c.left, c.right]) {
+      if (o.kind !== 'calc') continue;
+      const ref = this.calcs().find((x) => x.name === o.name);
+      if (ref) d = Math.max(d, 1 + this.depth(ref, new Set(seen)));
+    }
+    return d;
+  }
+
+  /** PRD 7.3.5 messages */
+  calcError = computed(() => {
+    const name = this.calcName().trim();
+    const idx = this.calcEditing();
+    if (!name) return 'Enter a name';
+    const taken = [...this.selectedFields().map((f) => this.columnLabel(f)), ...this.calcs().filter((_, i) => i !== idx).map((c) => c.name)];
+    if (taken.some((t) => t.toLowerCase() === name.toLowerCase())) return 'A column with this name already exists';
+    const l = this.operandFrom(this.calcLeft(), this.calcLeftValue());
+    const r = this.operandFrom(this.calcRight(), this.calcRightValue());
+    if (!l || !r) return 'Choose a column or enter a value';
+    const draft: CalculatedColumnDto = { name, left: l, operation: this.calcOp(), right: r, decimals: this.calcDecimals() };
+    if ([l, r].some((o) => o.kind === 'calc' && o.name.toLowerCase() === name.toLowerCase())) return 'This calculation refers to itself';
+    const d = this.depthOfDraft(draft);
+    if (d > 3) return d >= 99 ? 'This calculation refers to itself' : 'A calculation can build on others only three levels deep';
+    return '';
+  });
+
+  private depthOfDraft(draft: CalculatedColumnDto) {
+    const saved = this.calcs();
+    const idx = this.calcEditing();
+    const list = idx !== null && idx >= 0 ? saved.map((c, i) => (i === idx ? draft : c)) : [...saved, draft];
+    const byName = new Map(list.map((c) => [c.name, c]));
+    const walk = (c: CalculatedColumnDto, seen: Set<string>): number => {
+      if (seen.has(c.name)) return 99;
+      seen.add(c.name);
+      let d = 1;
+      for (const o of [c.left, c.right]) if (o.kind === 'calc' && byName.has(o.name)) d = Math.max(d, 1 + walk(byName.get(o.name)!, new Set(seen)));
+      return d;
+    };
+    return walk(draft, new Set());
+  }
+
+  /** Default decimals follow the first operand: money 3, whole numbers 0, otherwise 2 (PRD 7.3.1). */
+  private defaultDecimals(sel: string) {
+    if (!sel.startsWith('f:')) return 2;
+    const kind = this.fieldSelections().find((f) => f.field.fieldId === +sel.slice(2))?.field.numberKind;
+    return kind === 'money' ? 3 : kind === 'integer' ? 0 : 2;
+  }
+
+  onCalcLeftChange(sel: string) {
+    this.calcLeft.set(sel);
+    if (this.calcEditing() === -1) this.calcDecimals.set(this.defaultDecimals(sel));
+  }
+
+  isRatioOp(op: CalcOperation) {
+    return op === 'divide' || op === 'percentOf' || op === 'percentDiff';
+  }
+
+  calcFormatOptions = computed(() => {
+    const d = this.calcDecimals();
+    if (this.calcOp() === 'percentOf' || this.calcOp() === 'percentDiff') return [{ value: '', label: `Percent (${d} decimals)` }];
+    return [
+      { value: '', label: `Number (${d} decimals)` },
+      { value: 'c' + d, label: `Currency (${HOSPITAL.currency}, ${d} decimals)` },
+      { value: 'p' + d, label: `Percent (${d} decimals)` },
+    ];
+  });
+
+  openCalcEditor(index = -1) {
+    if (index === -1 && this.calcs().length >= this.MAX_CALCS) return;
+    const c = index >= 0 ? this.calcs()[index] : null;
+    this.calcEditing.set(index);
+    this.calcName.set(c?.name || '');
+    this.calcLeft.set(c ? this.operandKey(c.left) : '');
+    this.calcLeftValue.set(c?.left.kind === 'value' ? String(c.left.value) : '');
+    this.calcOp.set(c?.operation || 'add');
+    this.calcRight.set(c ? this.operandKey(c.right) : '');
+    this.calcRightValue.set(c?.right.kind === 'value' ? String(c.right.value) : '');
+    this.calcDecimals.set(c?.decimals ?? 2);
+    this.calcFormatSel.set(c?.formatPattern && !/^[np]\d$/.test(c.formatPattern) ? c.formatPattern : c?.formatPattern?.startsWith('p') && !this.isRatioOp(c.operation) ? c.formatPattern : '');
+    this.calcAgg.set(c?.aggregate || 'Sum');
+    this.calcTouched.set(false);
+  }
+
+  saveCalc() {
+    this.calcTouched.set(true);
+    if (this.calcError()) return;
+    const fmtSel = this.calcFormatSel();
+    const calc: CalculatedColumnDto = {
+      name: this.calcName().trim(),
+      left: this.operandFrom(this.calcLeft(), this.calcLeftValue())!,
+      operation: this.calcOp(),
+      right: this.operandFrom(this.calcRight(), this.calcRightValue())!,
+      decimals: Math.max(0, Math.min(4, Math.round(Number(this.calcDecimals()) || 0))),
+      formatPattern: fmtSel ? fmtSel.replace(/\d$/, String(this.calcDecimals())) : undefined,
+      aggregate: this.isRatioOp(this.calcOp()) ? undefined : this.calcAgg(),
+    };
+    const idx = this.calcEditing()!;
+    const oldName = idx >= 0 ? this.calcs()[idx].name : null;
+    this.calcs.update((list) => {
+      const next = idx >= 0 ? list.map((c, i) => (i === idx ? calc : c)) : [...list, calc];
+      // a renamed calculation keeps the columns that build on it pointing at it
+      return oldName && oldName !== calc.name
+        ? next.map((c) => ({ ...c, left: c.left.kind === 'calc' && c.left.name === oldName ? { kind: 'calc', name: calc.name } : c.left, right: c.right.kind === 'calc' && c.right.name === oldName ? { kind: 'calc', name: calc.name } : c.right }) as CalculatedColumnDto)
+        : next;
+    });
+    this.calcEditing.set(null);
+    this.markEdited();
+  }
+
+  cancelCalc() {
+    this.calcEditing.set(null);
+  }
+
+  removeCalc(i: number) {
+    const name = this.calcs()[i].name;
+    const users = this.calcs().filter((c) => [c.left, c.right].some((o) => o.kind === 'calc' && o.name === name));
+    if (users.length) { this.snackBar.open(`${users[0].name} uses ${name}. Change or remove it first.`, '', { duration: 3500 }); return; }
+    this.calcs.update((l) => l.filter((_, k) => k !== i));
+    this.markEdited();
+  }
+
+  calcFormula(c: CalculatedColumnDto) {
+    return `${this.operandLabel(c.left)} ${this.opLabel(c.operation)} ${this.operandLabel(c.right)}`;
+  }
+
+  calcSummaryLabel(c: CalculatedColumnDto) {
+    return this.isRatioOp(c.operation) ? 'Recalculated from totals' : AGGREGATION_OPTIONS.find((a) => a.value === (c.aggregate || 'Sum'))?.label || 'Total';
+  }
+
+  // === Grouping and summaries (PRD 6.5) ===
+
+  /** Grouped columns in the order they were grouped (selection order). */
+  groupedFields = computed(() => this.selectedFields().filter((f) => f.grouped));
+  groupableOptions = computed(() => this.selectedFields().filter((f) => f.field.isGroupable && !f.grouped));
+  /** Columns that can carry a summary: every selected column that isn't a group, with at least one allowed summary. */
+  summaryRows = computed(() => this.selectedFields().filter((f) => !f.grouped));
+
+  addGrouping(fieldId: string) {
+    if (fieldId) this.toggleFieldGrouped(+fieldId);
+  }
+
+  removeGrouping(fieldId: number) {
+    this.toggleFieldGrouped(fieldId);
+  }
+
+  summaryOptions(fs: FieldSelection) {
+    return AGGREGATION_OPTIONS.filter((a) => !a.value || fs.field.allowedAggregations.includes(a.value));
   }
 
   formatCellValue(value: any, col: string): string {
@@ -1000,6 +1217,9 @@ export class ReportBuilder {
       dataConfiguration: {
         primaryEntityId: this.selectedEntityId()!,
         groupingMode: groupings.length ? this.groupingMode() : undefined,
+        showGrandTotal: groupings.length ? this.showGrandTotal() : undefined,
+        groupsStart: groupings.length ? this.groupsStart() : undefined,
+        calculatedColumns: this.calcs().length ? this.calcs() : undefined,
         selectedFields,
         relatedEntities: relatedEntities.length > 0 ? relatedEntities : undefined,
         distinct: this.distinctEnabled() || undefined,
@@ -1045,13 +1265,18 @@ export class ReportBuilder {
     const out: { section: string; message: string }[] = [];
     const title = this.reportTitle().trim();
     if (!title || title.length > 150) out.push({ section: 'title', message: 'Enter a report title (up to 150 characters).' });
+    if (this.hasGroupings() && this.groupingMode() === 'summary')
+      for (const c of this.calcs())
+        for (const o of [c.left, c.right])
+          if (o.kind === 'column' && !this.selectedFields().some((f) => f.field.fieldId === o.fieldId && (f.aggregate === 'Sum' || f.grouped)))
+            { out.push({ section: 'grouping', message: `In summary-only mode, ${c.name} needs ${this.operandLabel(o)} summarised as Total.` }); break; }
     const sel = this.selectedFields();
     if (!sel.length && !this.joins().some((j) => j.selectedFieldIds.length)) out.push({ section: 'columns', message: 'Select at least one column.' });
     if (this.hasGroupings()) {
-      if (!sel.some((f) => f.aggregate)) out.push({ section: 'columns', message: 'Set at least one summary when grouping.' });
+      if (!sel.some((f) => f.aggregate)) out.push({ section: 'grouping', message: 'Set at least one summary when grouping.' });
       if (this.groupingMode() === 'summary') {
         const loose = sel.filter((f) => !f.grouped && !f.aggregate).map((f) => f.field.displayLabel);
-        if (loose.length) out.push({ section: 'columns', message: `In summary-only mode, group or summarise every column: ${loose.join(', ')}.` });
+        if (loose.length) out.push({ section: 'grouping', message: `In summary-only mode, group or summarise every column: ${loose.join(', ')}.` });
       }
     }
     if (this.filters().some((f) => this.filterError(f)) || this.havingFilters().some((f) => this.filterError(f, true)))
@@ -1060,6 +1285,7 @@ export class ReportBuilder {
     if (this.parameters().some((_, i) => this.paramIdError(i))) out.push({ section: 'params', message: 'Fix the highlighted parameter identifiers.' });
     if (this.conditionalFormats().some((r) => !r.targetColumn || r.value === '' || (!r.backgroundColor && !r.textColor)))
       out.push({ section: 'format', message: 'Each formatting rule needs a column, a value and a colour.' });
+    if (this.calcEditing() !== null) out.push({ section: 'calcs', message: 'Finish or cancel the calculated column you are editing.' });
     if (this.drillThroughConfigs().some((d) => !d.sourceColumn || !d.targetReportId || !d.parameterMappings.length))
       out.push({ section: 'drill', message: 'Each drill-through link needs a target report and at least one parameter mapping.' });
     return out;
@@ -1231,6 +1457,8 @@ export class ReportBuilder {
     const config = this.buildConfig();
     config.layoutType = this.layoutType();
     config.orientation = this.orientation();
+    const layout = this.columnLayout();
+    if (Object.keys(layout.widths || {}).length || layout.nowrap?.length || layout.pinned?.length) config.columnLayout = layout;
     if (
       (this.layoutType() === 'Chart' || this.layoutType() === 'ChartAndTable') &&
       this.chartLabelField() &&
@@ -1315,6 +1543,11 @@ export class ReportBuilder {
     this.currentOwnerName.set('');
     this.withdrawn.set([]);
     this.groupingMode.set('summary');
+    this.showGrandTotal.set(true);
+    this.groupsStart.set('auto');
+    this.calcs.set([]);
+    this.calcEditing.set(null);
+    this.columnLayout.set({});
     this.stale.set(false);
     this.runAt.set(null);
     this.reportError.set(null);
@@ -1422,6 +1655,28 @@ export class ReportBuilder {
     });
   }
 
+  // === Page fit (PRD 7.4.1 / 7.4.3) ===
+
+  /** Estimated printed width: numbers and dates 22mm, codes 20mm, short text 25mm, names 40mm. */
+  layoutFit = computed(() => {
+    const mm = (f: ReportField) => {
+      if (f.dataType === 'Number' || f.dataType === 'Date') return 22;
+      if (f.dataType === 'Boolean') return 18;
+      if (f.allowedAggregations.includes('CountDistinct')) return 20; // codes and references
+      return f.isGroupable ? 25 : 40; // short categorical text vs names
+    };
+    const cols = [...this.selectedFields().map((f) => mm(f.field)), ...this.calcs().map(() => 22)];
+    const total = cols.reduce((a, b) => a + b, 0);
+    const portrait = 180, landscape = 267;
+    const cap = this.orientation() === 'Landscape' ? landscape : portrait;
+    return { count: cols.length, total, cap, fits: total <= cap, fitsLandscape: total <= landscape };
+  });
+
+  onLayoutChange(l: { widths?: Record<string, number>; nowrap?: string[]; pinned?: string[] }) {
+    this.columnLayout.set(l);
+    this.dirty.set(true);
+  }
+
   // === Publish (PRD 6.11) ===
 
   publishDisabledReason = computed(() => {
@@ -1501,6 +1756,10 @@ export class ReportBuilder {
   /** The report as the results grid and exports see it. */
   gridConfig = computed(() => {
     this.stale();
+    this.calcs();
+    this.columnLayout();
+    this.showGrandTotal();
+    this.groupsStart();
     this.conditionalFormats();
     this.drillThroughConfigs();
     this.fieldSelections();
@@ -1592,7 +1851,7 @@ export class ReportBuilder {
     this.markEdited(!!t.closest('[data-presentation]'));
   }
 
-  private markEdited(presentationOnly = false) {
+  markEdited(presentationOnly = false) {
     this.dirty.set(true);
     if (!presentationOnly && this.previewResult()) this.stale.set(true);
   }
@@ -1685,8 +1944,8 @@ export class ReportBuilder {
   }
 
   runDisabledReason(): string {
-    if (!this.selectedEntityId()) return 'Select a module and entity first';
-    if (this.selectedFields().length === 0) return 'Select at least one field';
+    if (!this.selectedEntityId()) return 'Select a module and data set first';
+    if (this.selectedFields().length === 0) return 'Select at least one column';
     return '';
   }
 
@@ -1782,6 +2041,10 @@ export class ReportBuilder {
         const gone = new Set(missing.map((f) => f.fieldId));
         this.withdrawn.set(missing.map((f) => f.label || 'Field ' + f.fieldId));
         this.groupingMode.set(config.dataConfiguration.groupingMode || 'summary');
+        this.showGrandTotal.set(config.dataConfiguration.showGrandTotal !== false);
+        this.groupsStart.set(config.dataConfiguration.groupsStart || 'auto');
+        this.calcs.set(config.dataConfiguration.calculatedColumns || []);
+        this.columnLayout.set(config.columnLayout || {});
         const selectedFieldIds = new Set(config.dataConfiguration.selectedFields.map((f) => f.fieldId));
         const savedOrder = new Map(config.dataConfiguration.selectedFields.map((f, i) => [f.fieldId, i + 1]));
         this.orderSeq = savedOrder.size + 1;

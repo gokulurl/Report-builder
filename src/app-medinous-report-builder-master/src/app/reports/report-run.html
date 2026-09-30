@@ -21,7 +21,7 @@
     <!-- Report context -->
     <section class="fx-context">
       <div class="fx-ctx-title">
-        <button class="fx-crumb" (click)="router.navigate(['/reports'])"><mat-icon>arrow_back</mat-icon>All reports</button>
+        <button class="fx-crumb" (click)="back()"><mat-icon>arrow_back</mat-icon>{{ drillFrom() ? 'Back to ' + drillFrom() : 'All reports' }}</button>
         <span class="fx-run-title">
           {{ report()!.name }}
           @if (publication(); as pub) {

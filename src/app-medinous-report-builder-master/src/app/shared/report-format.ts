@@ -13,17 +13,16 @@ export function formatValue(value: any, pattern: string | undefined): string {
   if (typeof value === 'number' || (pattern && /^[cnp]\d$/.test(pattern))) {
     const num = typeof value === 'number' ? value : parseFloat(value);
     if (isNaN(num)) return String(value);
-    const fixed = (d: number) => num.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
-    switch (pattern) {
-      case 'n0': return fixed(0);
-      case 'n2': return fixed(2);
-      case 'n3': case 'n4': return fixed(3);
-      case 'c0': return money(num, 0);
-      case 'c2': return money(num);
-      case 'p0': return (num * 100).toLocaleString('en-US', { maximumFractionDigits: 0 }) + '%';
-      case 'p2': return (num * 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
-      default: return num.toLocaleString('en-US', { maximumFractionDigits: 3 });
+    const fixed = (n: number, d: number) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+    // n0–n4 decimals, p0–p4 percent (value stored as a fraction), c0 whole currency, c2 hospital currency decimals, c1/c3/c4 explicit
+    const m = /^([ncp])(\d)$/.exec(pattern || '');
+    if (m) {
+      const d = Number(m[2]);
+      if (m[1] === 'n') return fixed(num, d);
+      if (m[1] === 'p') return fixed(num * 100, d) + '%';
+      return money(num, pattern === 'c2' ? undefined : d);
     }
+    return num.toLocaleString('en-US', { maximumFractionDigits: 3 });
   }
   if (typeof value === 'string' && ISO_DATE.test(value)) {
     const date = new Date(value.length === 10 ? value + 'T00:00:00' : value);
@@ -85,12 +84,20 @@ export function matches(cell: any, rule: ConditionalFormatRule): boolean {
   }
 }
 
+/** Display format of a calculated column: its own, else percent for the percent operations, else a number with its decimals. */
+export function calcFormat(c: { operation: string; decimals: number; formatPattern?: string }) {
+  if (c.formatPattern) return c.formatPattern;
+  return (c.operation === 'percentOf' || c.operation === 'percentDiff' ? 'p' : 'n') + Math.max(0, Math.min(4, c.decimals ?? 2));
+}
+
 /** Column label → { aggregate, formatPattern } from a saved report's config. */
 export function columnMeta(config: ReportConfigurationDto) {
   const meta = new Map<string, { aggregate?: string; formatPattern?: string; fieldId?: number }>();
   for (const f of config.dataConfiguration.selectedFields) if (f.label) meta.set(f.label, f);
   for (const re of config.dataConfiguration.relatedEntities || [])
     for (const f of re.selectedFields) if (f.label) meta.set(f.label, f);
+  for (const c of config.dataConfiguration.calculatedColumns || [])
+    meta.set(c.name, { formatPattern: calcFormat(c), aggregate: /divide|percent/i.test(c.operation) ? 'Recalc' : c.aggregate || 'Sum' });
   return meta;
 }
 
@@ -107,6 +114,7 @@ export function computeTotals(data: Record<string, any>[], columns: string[], co
     const vals = data.map((r) => r[col]).filter((v) => typeof v === 'number') as number[];
     if (!vals.length) continue;
     const agg = meta.get(col)?.aggregate || '';
+    if (agg === 'Recalc') { cells[col] = { value: null, note: 'A ratio or percent total is recalculated from the column totals, which the server provides' }; continue; }
     if (agg === 'Avg' || agg === 'CountDistinct') {
       cells[col] = { value: null, note: agg === 'Avg' ? 'An overall average needs the server — averaging the rows would be wrong' : 'Distinct counts can overlap between rows, so they cannot be added up' };
       continue;
