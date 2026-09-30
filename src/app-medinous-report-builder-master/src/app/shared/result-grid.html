@@ -1,0 +1,111 @@
+<div class="fx-rg" [class.fx-stale]="stale()">
+  <div class="fx-rg-bar">
+    <span class="fx-rg-count">
+      @if (result().totalCount) {
+        Showing {{ showing().from | number }} to {{ showing().to | number }} of {{ result().totalCount | number }} rows
+      } @else { 0 rows }
+    </span>
+    <span class="fx-rg-meta">{{ runText() }}</span>
+    <span class="spacer"></span>
+    @if (detailMode()) {
+      <button class="fx-link" (click)="expandAll(true)"><mat-icon>unfold_more</mat-icon>Expand all</button>
+      <button class="fx-link" (click)="expandAll(false)"><mat-icon>unfold_less</mat-icon>Collapse all</button>
+    }
+    <label class="fx-check inline fx-rg-wrap"><input type="checkbox" [checked]="wrap()" (change)="wrap.set(!wrap())" /> Wrap text</label>
+    <div class="fx-search fx-rg-search">
+      <mat-icon>search</mat-icon>
+      <input placeholder="Search results" [ngModel]="search()" (ngModelChange)="search.set($event)" aria-label="Search in results" />
+    </div>
+  </div>
+
+  @if (result().truncated) {
+    <div class="fx-total-note">Only the first {{ result().data.length | number }} rows are shown; add filters for a complete result.</div>
+  }
+  @if (search()) {
+    <div class="fx-hint fx-rg-note">Search narrows the rows on screen. Totals still cover the whole result.</div>
+  }
+
+  <div class="fx-grid-wrap">
+    <table class="fx-grid" [class.fx-wrap]="wrap()">
+      <thead>
+        <tr>
+          @if (detailMode()) { <th class="fx-rg-tog"></th> }
+          <th class="rownum">#</th>
+          @for (col of columns(); track col) {
+            <th [style.width.px]="widths()[col]" [style.min-width.px]="widths()[col]">
+              {{ col }}
+              <span class="fx-rg-resize" (mousedown)="startResize($event, col)" title="Drag to resize"></span>
+            </th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (item of pageRows(); track $index) {
+          @switch (item.kind) {
+            @case ('detail') {
+              @if (item.kind === 'detail') {
+                <tr [class.fx-rg-cont]="item.continued">
+                  @if (detailMode()) { <td class="fx-rg-tog"></td> }
+                  <td class="rownum">{{ item.index + 1 }}</td>
+                  @for (col of columns(); track col) {
+                    <td [ngStyle]="style(item.row[col], col, 'detail')" [class.num]="isNum(item.row[col])" [class.drillable]="drillFor(col)"
+                        (click)="drillFor(col) && drill.emit({ row: item.row, col })">{{ format(item.row[col], col) }}</td>
+                  }
+                </tr>
+              }
+            }
+            @case ('summary') {
+              @if (item.kind === 'summary') {
+                <tr class="fx-rg-sum" (click)="toggle(item.group)">
+                  <td class="fx-rg-tog">
+                    <button class="fx-rg-tbtn" [attr.aria-expanded]="expanded().has(item.group)"
+                            [attr.aria-label]="(expanded().has(item.group) ? 'Collapse ' : 'Expand ') + groupLabel(item.group)">
+                      <mat-icon>{{ expanded().has(item.group) ? 'expand_more' : 'chevron_right' }}</mat-icon>
+                    </button>
+                  </td>
+                  <td class="rownum"></td>
+                  @for (col of columns(); track col; let c = $index) {
+                    @if (c === 0) {
+                      <td class="fx-rg-glabel">{{ groupLabel(item.group) }} <small>subtotal · {{ summaryOf(item.group).rowCount | number }} {{ summaryOf(item.group).rowCount === 1 ? "row" : "rows" }}</small></td>
+                    } @else {
+                      <td [ngStyle]="style(summaryOf(item.group).summary[col], col, 'summary')" class="num">{{ summaryCell(item.group, col) }}</td>
+                    }
+                  }
+                </tr>
+              }
+            }
+            @case ('grand') {
+              <tr class="fx-rg-grand">
+                @if (detailMode()) { <td class="fx-rg-tog"></td> }
+                <td class="rownum total-label">Total</td>
+                @for (col of columns(); track col; let c = $index) {
+                  @if (grand()?.[col]; as g) {
+                    <td class="num" [ngStyle]="style(g.value, col, 'summary')" [matTooltip]="g.note || ''">{{ g.value === null ? '—' : format(g.value, col) }}</td>
+                  } @else {
+                    <td>{{ c === 0 && detailMode() ? 'Grand total' : '' }}</td>
+                  }
+                }
+              </tr>
+            }
+          }
+        }
+        @if (!pageRows().length) {
+          <tr><td [attr.colspan]="columns().length + 2" class="fx-grid-empty">
+            {{ search() ? 'No rows on screen match your search.' : 'No records match the selected criteria.' }}
+          </td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  @if (pages().length > 1) {
+    <nav class="fx-pager" aria-label="Result pages">
+      <button class="fx-link" (click)="go(page() - 1)" [disabled]="page() === 0"><mat-icon>chevron_left</mat-icon>Previous</button>
+      @for (p of pageList(); track $index) {
+        @if (p === null) { <span class="fx-pager-gap">…</span> }
+        @else { <button class="fx-pager-num" [class.on]="p === page()" (click)="go(p)" [attr.aria-current]="p === page() ? 'page' : null">{{ p + 1 }}</button> }
+      }
+      <button class="fx-link" (click)="go(page() + 1)" [disabled]="page() >= pages().length - 1">Next<mat-icon>chevron_right</mat-icon></button>
+    </nav>
+  }
+</div>

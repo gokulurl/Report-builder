@@ -54,3 +54,25 @@ The `ReportSchedule` entity exists but has no controller. The UI's contract (`Re
 | `POST /schedules/{id}/run` | Run now; returns the updated schedule with `lastRun` and `lastStatus` |
 
 The server computes `nextRun`. `dateRange` is a rolling period (`Previous day`, `Previous 7 days`, `Month to date`, `Previous month`) that the job resolves into the report's two date parameters at run time.
+
+## 5. PRD changes (Fusion Report Builder PRD): what the UI now expects
+
+All of these are optional additions to the existing DTOs, so the current API keeps working.
+
+| Area | Contract | Notes |
+|---|---|---|
+| Grouping modes (6.5) | `DataConfigurationDto.groupingMode: 'summary' \| 'detail'` | In **detail** mode, return detail rows ordered by the grouped columns first, then the user's sorts. Return `PreviewResponse.groups: [{ key, rowCount, summary, start }]` and `grandTotal`, all computed in **one pass over the whole result** (not the page). Top N in detail mode ranks detail rows, then summarises the survivors. In summary mode it ranks groups. |
+| Grand total | `PreviewResponse.grandTotal`, `groupCount` | Worked out over ungrouped rows, so AVG and COUNT DISTINCT come out right. The UI prefers these over its own client-side fallback. |
+| Group limits | `{ code: 'TOO_MANY_GROUPS', reference }` as an HTTP 400 | The UI uses **6.5's numbers: 5 levels and 100 groups**. The PRD also says 3 levels / 5 groups (section 7) and 1,000 groups (acceptance criteria), which needs confirming. |
+| Collapsed groups | *(not yet)* | The UI collapses and expands groups on the client. The PRD wants a collapsed report to fetch no detail rows, and expanding a group to fetch only that group. That needs a group-rows endpoint. |
+| Paging (6.5, 6.8) | client-side today | The UI pages 50 rows at a time and never splits a group; an oversized group is marked "continued". Server paging should follow the same rule. |
+| Errors (6.8) | `{ code: 'TOO_MANY_GROUPS' \| 'TIMEOUT' \| …, reference }` | The UI shows the PRD's plain-language message plus the reference, and never raw database text. |
+| Operators (6.4) | unchanged values | The UI now offers `notin` (Not In List) and sends **Between as `[a, b]`**. Relative dates add `unit: 'week'` and `offset: -365` days. `RelativeDateResolver` needs `week`, resolved in the hospital time zone. |
+| Column flags (6.3) | `ReportField.isRelated`, `isRestricted` | Restricted columns must be **absent** for users without permission. When they're present, exports call `POST /audit/export { reportName, format, reason, columns }`. |
+| Entity info (5.1) | `ReportEntity.description`, `rowMeaning` | Shown in the New Report dialog ("One row is a registered patient"). |
+| Sharing (6.11) | `CreateSavedReportRequest.sharedWith: string[]`, `SavedReportDto.ownerName`, `sharedWith`, `version` | `GET /users` feeds the share picker. Opening someone else's report is read-only, and Save becomes "Save a Copy". |
+| Versions (6.11) | `GET /saved/{id}/versions` → `[{ version, savedAt, savedBy, changeDescription }]` | |
+| Publishing (6.11) | `GET/POST /publications`, `DELETE /publications/{id}` (soft, audited), `POST /publications/{id}/restore` | `{ reportId, moduleId, type: 'live' \| 'snapshot', label?, snapshot?: { result, ranWith, runAt } }`. A snapshot label must be unique per module per day, otherwise return `{ code: 'DUPLICATE_LABEL' }`. The Reports screen lists publications per module. |
+| Column requests (9) | `POST /column-requests { moduleId, entityId, request }` → `{ reference }` | |
+| Exports (6.10) | client-side today | Excel follows 6.10.1 (built with ExcelJS). CSV has a Row Type column (Detail / Subtotal / Grand total). The **PDF** block (hospital, title, run time, user, filters, parameters, page numbers, summary rows kept with their group) is still server-side. |
+| Formats (6.3) | pattern `c2` | Currency and dates follow hospital settings (KD, 3 decimals; "29 Sep 2026"), in `shared/hospital-settings.ts` for now. |

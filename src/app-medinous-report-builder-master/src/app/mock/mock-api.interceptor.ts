@@ -1,16 +1,28 @@
 // Dev-only: answers /api/v1/reports/* in the browser so the UI runs without the .NET API.
 // Remove `withInterceptors([mockApiInterceptor])` in app.config.ts to talk to the real backend.
-import { HttpInterceptorFn, HttpResponse } from '@angular/common/http';
-import { of, delay } from 'rxjs';
+import { HttpErrorResponse, HttpInterceptorFn, HttpResponse } from '@angular/common/http';
+import { of, delay, throwError, timer, mergeMap } from 'rxjs';
 import {
   ReportConfigurationDto,
   FilterDto,
   FilterGroupDto,
   SavedReportDetailDto,
   RELATIVE_DATE_PRESETS,
+  GroupSummary,
 } from '../models/report.models';
-import { MODULES, ENTITIES, FIELDS, RELATIONSHIPS, ROWS, SEED_REPORTS, SEED_SCHEDULES } from './mock-data';
-import { ReportScheduleDto } from '../models/report.models';
+import { MODULES, ENTITIES, FIELDS, RELATIONSHIPS, ROWS, SEED_REPORTS, SEED_SCHEDULES, SEED_PUBLICATIONS, USERS } from './mock-data';
+import { PublicationDto, ReportScheduleDto, ReportVersionDto } from '../models/report.models';
+
+const PUB_KEY = 'mock-publications-v1';
+let publications: PublicationDto[] = (() => {
+  try { const raw = localStorage.getItem(PUB_KEY); if (raw) return JSON.parse(raw); } catch {}
+  return structuredClone(SEED_PUBLICATIONS);
+})();
+function persistPublications() { try { localStorage.setItem(PUB_KEY, JSON.stringify(publications)); } catch {} }
+const versions: Record<string, ReportVersionDto[]> = {};
+const audit: any[] = [];
+let requestSeq = 1040;
+const ref = () => 'RB-' + Date.now().toString(36).toUpperCase().slice(-6);
 
 const SCHED_KEY = 'mock-schedules-v1';
 let schedules: ReportScheduleDto[] = (() => {
@@ -30,7 +42,7 @@ function nextRun(s: Pick<ReportScheduleDto, 'frequency' | 'time' | 'dayOfWeek' |
   return at.toISOString();
 }
 
-const STORE_KEY = 'mock-saved-reports-v4';
+const STORE_KEY = 'mock-saved-reports-v5';
 function loadStore(): SavedReportDetailDto[] {
   try {
     const raw = localStorage.getItem(STORE_KEY);
@@ -76,13 +88,16 @@ export const mockApiInterceptor: HttpInterceptorFn = (req, next) => {
       result = ok(structuredClone(saved.find((r) => r.reportId === seg![1])));
     else if (req.method === 'POST' && path === '/saved') {
       const now = new Date().toISOString();
-      const rec: SavedReportDetailDto = { ...body, reportId: 'rpt-' + Date.now(), ownerId: 'me', createdAt: now, modifiedAt: now };
+      const rec: SavedReportDetailDto = { ...body, reportId: 'rpt-' + Date.now(), ownerId: 'me', ownerName: 'Gokul M', version: 1, createdAt: now, modifiedAt: now };
       saved.push(rec);
       persist();
       result = ok(rec);
     } else if (req.method === 'PUT' && (seg = path.match(/^\/saved\/([^/]+)$/))) {
       const rec = saved.find((r) => r.reportId === seg![1])!;
       Object.assign(rec, body, { modifiedAt: new Date().toISOString() });
+      const list = (versions[rec.reportId] ||= [{ version: 1, savedAt: rec.createdAt, savedBy: rec.ownerName || 'Gokul M', changeDescription: 'Created' }]);
+      list.push({ version: list.length + 1, savedAt: rec.modifiedAt, savedBy: 'Gokul M', changeDescription: body.changeDescription || 'Saved' });
+      rec.version = list.length;
       persist();
       result = ok(rec);
     } else if (req.method === 'DELETE' && (seg = path.match(/^\/saved\/([^/]+)$/))) {
@@ -109,6 +124,33 @@ export const mockApiInterceptor: HttpInterceptorFn = (req, next) => {
       const f = FIELDS.find((x) => x.fieldId === +seg![1]);
       const vals = f ? [...new Set((ROWS[f.entityId] || []).map((r) => r[f.systemFieldName]).filter((v) => v != null && v !== ''))] : [];
       result = ok(vals.map(String).sort((a, b) => a.localeCompare(b)));
+    } else if (req.method === 'GET' && path === '/users') {
+      result = ok(USERS);
+    } else if (req.method === 'GET' && (seg = path.match(/^\/saved\/([^/]+)\/versions$/))) {
+      const r = saved.find((x) => x.reportId === seg![1]);
+      result = ok(versions[seg[1]] || (r ? [{ version: 1, savedAt: r.createdAt, savedBy: r.ownerName || 'Gokul M', changeDescription: 'Created' }] : []));
+    } else if (req.method === 'GET' && path === '/publications') {
+      result = ok(publications);
+    } else if (req.method === 'POST' && path === '/publications') {
+      const day = new Date().toISOString().slice(0, 10);
+      if (body.type === 'snapshot' && publications.some((x) => !x.removed && x.type === 'snapshot' && x.moduleId === body.moduleId && x.label === body.label && x.publishedAt.slice(0, 10) === day))
+        throw { code: 'DUPLICATE_LABEL' };
+      const rec: PublicationDto = { ...body, publicationId: 'pub-' + Date.now(), publishedBy: 'Gokul M', publishedAt: new Date().toISOString() };
+      publications.push(rec); persistPublications(); audit.push({ action: 'publish', rec, at: new Date() }); result = ok(rec);
+    } else if (req.method === 'DELETE' && (seg = path.match(/^\/publications\/([^/]+)$/))) {
+      const rec = publications.find((x) => x.publicationId === seg![1])!;
+      Object.assign(rec, { removed: true, removedBy: 'Gokul M', removedAt: new Date().toISOString() });
+      persistPublications(); audit.push({ action: 'remove', id: rec.publicationId, at: new Date() }); result = ok(rec);
+    } else if (req.method === 'POST' && (seg = path.match(/^\/publications\/([^/]+)\/restore$/))) {
+      const rec = publications.find((x) => x.publicationId === seg![1])!;
+      Object.assign(rec, { removed: false, removedBy: undefined, removedAt: undefined });
+      persistPublications(); audit.push({ action: 'restore', id: rec.publicationId, at: new Date() }); result = ok(rec);
+    } else if (req.method === 'POST' && path === '/column-requests') {
+      audit.push({ action: 'column-request', body, at: new Date() });
+      result = ok({ reference: 'CR-' + ++requestSeq });
+    } else if (req.method === 'POST' && path === '/audit/export') {
+      audit.push({ action: 'export', body, at: new Date() });
+      result = ok({ reference: ref() });
     } else if (req.method === 'GET' && path === '/schedules') {
       result = ok(schedules);
     } else if (req.method === 'POST' && path === '/schedules') {
@@ -124,7 +166,9 @@ export const mockApiInterceptor: HttpInterceptorFn = (req, next) => {
       rec.lastRun = new Date().toISOString(); rec.lastStatus = 'Delivered'; persistSchedules(); result = ok(rec);
     } else return next(req);
   } catch (e: any) {
-    return of(new HttpResponse({ status: 400, body: { success: false, message: String(e?.message || e), errors: [String(e?.message || e)] } })).pipe(delay(200));
+    // Coded failures (PRD 6.8) carry a reference; anything else is reported as a configuration problem.
+    const error = { success: false, code: e?.code || 'CONFIG', reference: ref() };
+    return timer(250).pipe(mergeMap(() => throwError(() => new HttpErrorResponse({ status: 400, error, url: req.url }))));
   }
   const slow = req.method === 'POST' && path === '/preview' && /outstanding/i.test(body?.title || '');
   return of(new HttpResponse({ status: 200, body: result })).pipe(delay(slow ? 5000 : 250));
@@ -230,35 +274,92 @@ function runQuery(config: ReportConfigurationDto) {
   const cols = [
     ...dc.selectedFields.map((s) => ({ ...s })),
     ...(dc.relatedEntities || []).flatMap((re) => re.selectedFields),
-  ].map((s) => ({ ...s, label: s.label || FIELDS.find((f) => f.fieldId === s.fieldId)!.displayLabel }));
+  ].map((s) => ({ ...s, label: s.label || FIELDS.find((f) => f.fieldId === s.fieldId)?.displayLabel || 'Field ' + s.fieldId }));
 
-  const aggregated = cols.some((c) => c.aggregate) || (dc.groupings?.length ?? 0) > 0;
-  let out: Row[];
-  if (aggregated) {
-    const groupIds = dc.groupings?.length ? dc.groupings : cols.filter((c) => !c.aggregate).map((c) => c.fieldId);
-    const groups = new Map<string, Row[]>();
-    for (const r of rows) {
-      const k = JSON.stringify(groupIds.map((id) => r[id]));
-      if (!groups.has(k)) groups.set(k, []);
-      groups.get(k)!.push(r);
+  const agg = (vals: any[], a?: string) => {
+    const v = vals.filter((x) => x != null && x !== '');
+    switch (a) {
+      case 'Count': return v.length;
+      case 'CountDistinct': return new Set(v).size;
+      case 'Sum': return round(v.reduce((s, b) => s + Number(b), 0));
+      case 'Avg': return v.length ? round(v.reduce((s, b) => s + Number(b), 0) / v.length) : null;
+      case 'Min': return v.length ? v.reduce((x, y) => (y < x ? y : x)) : null;
+      case 'Max': return v.length ? v.reduce((x, y) => (y > x ? y : x)) : null;
+      default: return undefined;
     }
-    out = [...groups.values()].map((g) => {
-      const o: Row = {};
-      for (const c of cols) {
-        const vals = g.map((r) => r[c.fieldId]).filter((x) => x != null);
-        switch (c.aggregate) {
-          case 'Count': o[c.fieldId] = vals.length; break;
-          case 'CountDistinct': o[c.fieldId] = new Set(vals).size; break;
-          case 'Sum': o[c.fieldId] = round(vals.reduce((a, b) => a + Number(b), 0)); break;
-          case 'Avg': o[c.fieldId] = vals.length ? round(vals.reduce((a, b) => a + Number(b), 0) / vals.length) : null; break;
-          case 'Min': o[c.fieldId] = vals.length ? vals.reduce((a, b) => (b < a ? b : a)) : null; break;
-          case 'Max': o[c.fieldId] = vals.length ? vals.reduce((a, b) => (b > a ? b : a)) : null; break;
-          default: o[c.fieldId] = g[0][c.fieldId];
-        }
+  };
+  const summarised = cols.filter((c) => c.aggregate);
+  const toLabels = (r: Row) => { const o: Record<string, any> = {}; for (const c of cols) o[c.label] = r[c.fieldId]; return o; };
+  const cmp = (a: any, b: any) => (a == null ? 1 : b == null ? -1 : a < b ? -1 : a > b ? 1 : 0);
+  const MAX_GROUPS = 100;
+
+  // Grand total over every filtered row, in the same pass (PRD 6.5) — correct for AVG and COUNT DISTINCT too.
+  const grandTotal: Record<string, any> = {};
+  for (const c of summarised) grandTotal[c.label] = agg(rows.map((r) => r[c.fieldId]), c.aggregate);
+
+  const groupIds = dc.groupings?.length ? dc.groupings : [];
+  const keyOf = (r: Row) => JSON.stringify(groupIds.map((id) => r[id]));
+
+  // ---------- detail mode: detail rows, a summary under each group, a grand total ----------
+  if (dc.groupingMode === 'detail' && groupIds.length) {
+    let detail = rows;
+    if (dc.topN) {
+      // Ranks detail rows; group summaries then reflect only the survivors (PRD 6.6)
+      const t = dc.topN;
+      detail = [...detail].sort((a, b) => cmp(a[t.byFieldId], b[t.byFieldId]) * (t.direction === 'top' ? -1 : 1)).slice(0, t.count);
+    }
+    // Grouped columns order first; the user's sort applies within each group
+    detail = [...detail].sort((a, b) => {
+      for (const id of groupIds) { const c = cmp(a[id], b[id]); if (c) return c; }
+      for (const s of dc.sortings || []) { const c = cmp(a[s.fieldId], b[s.fieldId]) * (s.direction === 'DESC' ? -1 : 1); if (c) return c; }
+      return 0;
+    });
+    const groups: GroupSummary[] = [];
+    let cur = '';
+    detail.forEach((r, i) => {
+      const k = keyOf(r);
+      if (k !== cur) {
+        cur = k;
+        const key: Record<string, any> = {};
+        for (const id of groupIds) { const c = cols.find((x) => x.fieldId === id); if (c) key[c.label] = r[id]; }
+        groups.push({ key, rowCount: 0, summary: {}, start: i });
       }
+      groups[groups.length - 1].rowCount++;
+    });
+    if (groups.length > MAX_GROUPS) throw { code: 'TOO_MANY_GROUPS' };
+    for (const g of groups) {
+      const slice = detail.slice(g.start, g.start + g.rowCount);
+      for (const c of summarised) g.summary[c.label] = agg(slice.map((r) => r[c.fieldId]), c.aggregate);
+    }
+    if (dc.topN) for (const c of summarised) grandTotal[c.label] = agg(detail.map((r) => r[c.fieldId]), c.aggregate);
+    const data = detail.slice(0, 1000).map(toLabels);
+    return {
+      data, totalCount: detail.length, page: 1, pageSize: data.length,
+      executionTimeMs: Math.max(3, Math.round(performance.now() - t0)), truncated: detail.length > 1000,
+      groups, grandTotal, groupCount: groups.length,
+    };
+  }
+
+  // ---------- summary mode (one row per group) or a plain list ----------
+  const aggregated = summarised.length > 0 || groupIds.length > 0;
+  let out: Row[];
+  let groupCount: number | undefined;
+  if (aggregated) {
+    const ids = groupIds.length ? groupIds : cols.filter((c) => !c.aggregate).map((c) => c.fieldId);
+    const map = new Map<string, Row[]>();
+    for (const r of rows) {
+      const k = JSON.stringify(ids.map((id) => r[id]));
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(r);
+    }
+    if (groupIds.length && map.size > MAX_GROUPS) throw { code: 'TOO_MANY_GROUPS' };
+    out = [...map.values()].map((g) => {
+      const o: Row = {};
+      for (const c of cols) o[c.fieldId] = c.aggregate ? agg(g.map((r) => r[c.fieldId]), c.aggregate) : g[0][c.fieldId];
       return o;
     });
     out = out.filter((r) => matchGroup(r, dc.having, (row, id) => row[id]));
+    groupCount = groupIds.length ? out.length : undefined;
   } else {
     out = rows;
   }
@@ -272,28 +373,21 @@ function runQuery(config: ReportConfigurationDto) {
       return true;
     });
   }
-
-  const cmp = (a: any, b: any) => (a == null ? 1 : b == null ? -1 : a < b ? -1 : a > b ? 1 : 0);
   if (dc.sortings?.length) {
     out = [...out].sort((a, b) => {
-      for (const s of dc.sortings!) {
-        const c = cmp(a[s.fieldId], b[s.fieldId]) * (s.direction === 'DESC' ? -1 : 1);
-        if (c) return c;
-      }
+      for (const s of dc.sortings!) { const c = cmp(a[s.fieldId], b[s.fieldId]) * (s.direction === 'DESC' ? -1 : 1); if (c) return c; }
       return 0;
     });
   }
   if (dc.topN) {
+    // In summary mode the rows are groups, so this ranks groups (PRD 6.6)
     const t = dc.topN;
     out = [...out].sort((a, b) => cmp(a[t.byFieldId], b[t.byFieldId]) * (t.direction === 'top' ? -1 : 1)).slice(0, t.count);
+    if (aggregated) for (const c of summarised) grandTotal[c.label] = agg(out.map((r) => r[c.fieldId]), c.aggregate === 'Avg' || c.aggregate === 'CountDistinct' ? undefined : c.aggregate === 'Count' ? 'Sum' : c.aggregate) ?? null;
   }
 
   const totalCount = out.length;
-  const data = out.slice(0, 1000).map((r) => {
-    const o: Record<string, any> = {};
-    for (const c of cols) o[c.label] = r[c.fieldId];
-    return o;
-  });
+  const data = out.slice(0, 1000).map(toLabels);
   return {
     data,
     totalCount,
@@ -301,6 +395,8 @@ function runQuery(config: ReportConfigurationDto) {
     pageSize: data.length,
     executionTimeMs: Math.max(3, Math.round(performance.now() - t0)),
     truncated: totalCount > 1000,
+    grandTotal: summarised.length ? grandTotal : undefined,
+    groupCount,
   };
 }
 
@@ -318,6 +414,13 @@ function relativeRange(v: { unit: string; offset: number; anchor: string } | und
     return [iso(from), iso(today)];
   }
   const y = today.getFullYear(), m = today.getMonth();
+  if (v.unit === 'week') {
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - ((today.getDay() + 6) % 7) + v.offset * 7);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return [iso(monday), iso(sunday)];
+  }
   if (v.unit === 'month') {
     const from = new Date(y, m + v.offset, 1);
     const to = new Date(y, m + v.offset + 1, 0);

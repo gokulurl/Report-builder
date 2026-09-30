@@ -14,10 +14,15 @@
           <span class="fx-ctx-sub">
             @if (currentReportId()) {
               <mat-icon class="tiny">bookmark</mat-icon> {{ currentReportName() }}
+              @if (isOthersReport()) { · shared with you by {{ currentOwnerName() }} (read-only) }
             } @else {
               New report
             }
+            @if (entityInfo()?.rowMeaning) { · One row is {{ entityInfo()!.rowMeaning }} }
           </span>
+          @if (showIssues() && (!reportTitle().trim() || reportTitle().length > 150)) {
+            <small class="fx-field-error">Enter a report title (up to 150 characters).</small>
+          }
         </div>
         @if (selectedEntityId()) {
           <div class="fx-ctx-meta">
@@ -41,6 +46,13 @@
               </div>
             </div>
           } @else {
+            @if (withdrawn().length) {
+              <div class="fx-notice" role="status">
+                <mat-icon>info</mat-icon>
+                <span>This report used columns that are no longer available: <b>{{ withdrawn().join(', ') }}</b>. It opened without them.</span>
+                <button class="fx-icon-btn sm" (click)="withdrawn.set([])" aria-label="Dismiss"><mat-icon>close</mat-icon></button>
+              </div>
+            }
             <!-- Columns -->
             <div class="fx-section">
               <button class="fx-band" (click)="toggleSection('columns')" [attr.aria-expanded]="isOpen('columns')">
@@ -84,10 +96,13 @@
                     <div class="fx-field" [class.on]="fs.selected">
                       <label class="fx-check">
                         <input type="checkbox" [checked]="fs.selected" (change)="toggleFieldSelected(fs.field.fieldId)" />
-                        <span [matTooltip]="fs.field.description || ''">{{ fs.field.displayLabel }}</span>
-                        @if (fs.field.isComputed) {
-                          <mat-icon class="tiny muted" matTooltip="Calculated column">functions</mat-icon>
-                        }
+                        <span class="fx-field-name">
+                          {{ fs.field.displayLabel }}
+                          @if (fs.field.isComputed) { <mat-icon class="tiny muted" matTooltip="Calculated column">functions</mat-icon> }
+                          @if (fs.field.isRelated) { <mat-icon class="tiny muted" matTooltip="From related data, one value per row">link</mat-icon> }
+                          @if (fs.field.isRestricted) { <mat-icon class="tiny fx-restricted" matTooltip="Restricted column: exporting asks for a reason">lock</mat-icon> }
+                          @if (fs.field.description) { <small class="fx-field-desc">{{ fs.field.description }}</small> }
+                        </span>
                         <span class="fx-type">{{ fs.field.dataType }}</span>
                       </label>
                       @if (fs.selected) {
@@ -102,15 +117,16 @@
                             </select>
                           }
                           @if (fs.field.dataType === 'Number' || fs.field.dataType === 'Date') {
-                            <select [ngModel]="fs.formatPattern" (ngModelChange)="setFieldFormatPattern(fs.field.fieldId, $event)" aria-label="Format">
+                            <select data-presentation [ngModel]="fs.formatPattern" (ngModelChange)="setFieldFormatPattern(fs.field.fieldId, $event)" aria-label="Format">
                               @for (fmt of getFormatOptionsForField(fs.field.dataType); track fmt.value) {
                                 <option [ngValue]="fmt.value">{{ fmt.label }}</option>
                               }
                             </select>
                           }
                           @if (fs.field.isGroupable) {
-                            <label class="fx-check inline">
-                              <input type="checkbox" [checked]="fs.grouped" (change)="toggleFieldGrouped(fs.field.fieldId)" />
+                            <label class="fx-check inline" [matTooltip]="!fs.grouped && groupedCount() >= MAX_GROUP_LEVELS ? 'Up to ' + MAX_GROUP_LEVELS + ' grouping levels' : ''">
+                              <input type="checkbox" [checked]="fs.grouped" (change)="toggleFieldGrouped(fs.field.fieldId)"
+                                     [disabled]="!fs.grouped && groupedCount() >= MAX_GROUP_LEVELS" />
                               Group
                             </label>
                           }
@@ -121,6 +137,20 @@
                       <p class="fx-hint center">No fields match “{{ fieldSearch() }}”.</p>
                     }
                   </div>
+                  <button class="fx-link fx-req-link" (click)="openRequestColumn()"><mat-icon>add_comment</mat-icon> Can't find a column? Request it</button>
+
+                  @if (hasGroupings()) {
+                    <div class="fx-sub">Grouping</div>
+                    <div class="fx-seg" role="group" aria-label="Grouping mode">
+                      <button [class.on]="groupingMode() === 'summary'" (click)="groupingMode.set('summary')">Summary only</button>
+                      <button [class.on]="groupingMode() === 'detail'" (click)="groupingMode.set('detail')">Detail with group summaries</button>
+                    </div>
+                    <p class="fx-hint">
+                      @if (groupingMode() === 'summary') { One row per group. Every column must be grouped or summarised. }
+                      @else { Detail rows stay, with a subtotal under each group and a grand total at the end. }
+                      Grouped columns sort first; any sort you set applies within each group.
+                    </p>
+                  }
 
                   <!-- Related data (joins) -->
                   @if (relationships().length > 0) {
@@ -178,42 +208,74 @@
                     </div>
                   }
                   @for (filter of filters(); track $index; let i = $index) {
+                    <div class="fx-rule-wrap" [class.invalid]="showIssues() && filterError(filter)">
                     <div class="fx-rule">
-                      <select class="w-field" [(ngModel)]="filter.fieldId" aria-label="Field">
+                      <select class="w-field" [(ngModel)]="filter.fieldId" (ngModelChange)="onFilterFieldChange(filter, 'filters')" aria-label="Field">
                         @for (f of filterableFields(); track f.fieldId) {
                           <option [ngValue]="f.fieldId">{{ f.displayLabel }}</option>
                         }
                         @for (j of joins(); track j.relationship.relationshipId) {
                           <optgroup [label]="j.entity.entityName">
                             @for (f of j.fields; track f.fieldId) {
-                              @if (f.isFilterable) {
-                                <option [ngValue]="f.fieldId">{{ f.displayLabel }}</option>
-                              }
+                              @if (f.isFilterable) { <option [ngValue]="f.fieldId">{{ f.displayLabel }}</option> }
                             }
                           </optgroup>
                         }
                       </select>
-                      <select class="w-op" [(ngModel)]="filter.operator" aria-label="Operator">
+                      <select class="w-op" [(ngModel)]="filter.operator" (ngModelChange)="onFilterOperatorChange(filter, 'filters')" aria-label="Operator">
                         @for (op of getOperatorsForField(filter.fieldId); track op.value) {
                           <option [ngValue]="op.value">{{ op.label }}</option>
                         }
                       </select>
-                      @if (filter.operator === 'relative') {
-                        <select class="w-val" [(ngModel)]="filter.value" aria-label="Period">
-                          @for (preset of RELATIVE_DATE_PRESETS; track preset.label) {
-                            <option [ngValue]="preset.label">{{ preset.label }}</option>
-                          }
-                        </select>
-                      } @else if (filter.operator !== 'isnull' && filter.operator !== 'isnotnull') {
-                        <input class="w-val" [(ngModel)]="filter.value"
-                               [placeholder]="filter.operator === 'between' ? 'From, To' : filter.operator === 'in' ? 'A, B, C' : 'Value'" />
-                      } @else {
-                        <span class="w-val"></span>
-                      }
                       <button class="fx-icon-btn sm" (click)="removeFilter(i)" matTooltip="Remove filter"><mat-icon>close</mat-icon></button>
                     </div>
+                    @if (filter.operator !== 'isnull' && filter.operator !== 'isnotnull') {
+                      <div class="fx-rule fx-rule-values">
+                        @if (filter.operator === 'relative') {
+                          <select class="w-val" [(ngModel)]="filter.value" aria-label="Period">
+                            @for (preset of RELATIVE_DATE_PRESETS; track preset.label) { <option [ngValue]="preset.label">{{ preset.label }}</option> }
+                          </select>
+                        } @else {
+                          <ng-container *ngTemplateOutlet="valueInput; context: { row: filter, which: 'value' }"></ng-container>
+                          @if (filter.operator === 'between') {
+                            <span class="fx-by">and</span>
+                            <ng-container *ngTemplateOutlet="valueInput; context: { row: filter, which: 'value2' }"></ng-container>
+                          }
+                        }
+                      </div>
+                    }
+                    @if (filterError(filter) && (showIssues() || filter.value || filter.value2)) {
+                      <small class="fx-field-error">{{ filterError(filter) }}</small>
+                    }
+                    </div>
                   }
-                  <button class="fx-link" (click)="addFilter()" [disabled]="filterableFields().length === 0">
+                  <ng-template #valueInput let-row="row" let-which="which">
+                    @if (isParamRef(row[which])) {
+                      <span class="fx-chip fx-param-chip">{{ row[which] }}<button (click)="clearFilterParam(row, which)" aria-label="Use a fixed value instead"><mat-icon>close</mat-icon></button></span>
+                    } @else {
+                      @switch (fieldType(row.fieldId)) {
+                        @case ('Date') { <input class="w-val" type="date" [(ngModel)]="row[which]" min="1900-01-01" aria-label="Date" /> }
+                        @case ('Boolean') {
+                          <select class="w-val" [(ngModel)]="row[which]" aria-label="Yes or No"><option value="">Choose…</option><option value="true">Yes</option><option value="false">No</option></select>
+                        }
+                        @case ('Number') {
+                          <input class="w-val" inputmode="decimal" [(ngModel)]="row[which]" [placeholder]="row.operator === 'in' ? '10, 20, 30' : '1234.56'" aria-label="Number" />
+                        }
+                        @default {
+                          <input class="w-val" [(ngModel)]="row[which]" [placeholder]="row.operator === 'in' || row.operator === 'notin' ? 'A, B, C' : 'Value'" aria-label="Value" />
+                        }
+                      }
+                      @if (parameters().length) {
+                        <select class="fx-param-pick" (change)="setFilterParam(row, which, $any($event.target).value); $any($event.target).value = ''"
+                                matTooltip="Use a parameter asked for at run time" aria-label="Use a parameter">
+                          <option value="">&#64;</option>
+                          @for (pm of parameters(); track pm.paramId) { <option [value]="pm.paramId">{{ pm.label || pm.paramId }}</option> }
+                        </select>
+                      }
+                    }
+                  </ng-template>
+                  <button class="fx-link" (click)="addFilter()" [disabled]="filterableFields().length === 0 || filters().length >= MAX_FILTERS"
+                          [matTooltip]="filters().length >= MAX_FILTERS ? 'Up to ' + MAX_FILTERS + ' conditions' : ''">
                     <mat-icon>add</mat-icon> Add Filter
                   </button>
 
@@ -243,9 +305,11 @@
                           <option value="neq">Not Equals</option>
                           <option value="between">Between</option>
                         </select>
-                        <input class="w-val" [(ngModel)]="hf.value" placeholder="Value" />
+                        <input class="w-val" inputmode="decimal" [(ngModel)]="hf.value" placeholder="1234.56" aria-label="Value" />
+                        @if (hf.operator === 'between') { <span class="fx-by">and</span><input class="w-val" inputmode="decimal" [(ngModel)]="hf.value2" placeholder="5000" aria-label="Second value" /> }
                         <button class="fx-icon-btn sm" (click)="removeHavingFilter(i)"><mat-icon>close</mat-icon></button>
                       </div>
+                      @if (filterError(hf, true) && (showIssues() || hf.value)) { <small class="fx-field-error">{{ filterError(hf, true) }}</small> }
                     }
                     <button class="fx-link" (click)="addHavingFilter()"><mat-icon>add</mat-icon> Add Having Filter</button>
                   }
@@ -264,8 +328,8 @@
                 <div class="fx-section-body">
                   @for (sort of sortings(); track $index; let i = $index) {
                     <div class="fx-rule">
-                      <select class="w-field" [(ngModel)]="sort.fieldId">
-                        @for (f of sortableFields(); track f.fieldId) {
+                      <select class="w-field" [(ngModel)]="sort.fieldId" (ngModelChange)="sortings.set([...sortings()])">
+                        @for (f of sortOptionsFor(i); track f.fieldId) {
                           <option [ngValue]="f.fieldId">{{ f.displayLabel }}</option>
                         }
                       </select>
@@ -276,10 +340,13 @@
                       <button class="fx-icon-btn sm" (click)="removeSorting(i)"><mat-icon>close</mat-icon></button>
                     </div>
                   }
-                  <button class="fx-link" (click)="addSorting()" [disabled]="sortableFields().length === 0"
-                          [matTooltip]="sortableFields().length === 0 ? 'Select a field first' : ''">
+                  <button class="fx-link" (click)="addSorting()" [disabled]="!canAddSort()"
+                          [matTooltip]="sortableFields().length === 0 ? 'Select a field first' : sortings().length >= MAX_SORTS ? 'Up to five sort levels' : !canAddSort() ? 'Every selected column is already sorted' : ''">
                     <mat-icon>add</mat-icon> Add Sort
                   </button>
+                  @if (hasGroupings() && sortings().length) {
+                    <p class="fx-hint">Grouped columns sort first. These sorts apply within each group.</p>
+                  }
 
                   <div class="fx-sub">Query Options</div>
                   <label class="fx-check">
@@ -296,15 +363,17 @@
                         <option value="top">Top (highest)</option>
                         <option value="bottom">Bottom (lowest)</option>
                       </select>
-                      <input class="w-num" type="number" min="1" max="1000" [ngModel]="topNCount()" (ngModelChange)="topNCount.set($event)" aria-label="Rows" />
+                      <input class="w-num" type="number" min="1" max="100" step="1" [ngModel]="topNCount()" (ngModelChange)="topNCount.set($event)" aria-label="How many" />
                       <span class="fx-by">by</span>
                       <select class="w-field" [ngModel]="topNFieldId()" (ngModelChange)="topNFieldId.set($event)">
                         <option [ngValue]="null" disabled>By Field</option>
                         @for (f of selectedFields(); track f.field.fieldId) {
-                          <option [ngValue]="f.field.fieldId">{{ f.field.displayLabel }}</option>
+                          <option [ngValue]="f.field.fieldId">{{ hasGroupings() && groupingMode() === 'summary' ? columnLabel(f) : f.field.displayLabel }}</option>
                         }
                       </select>
                     </div>
+                    @if (topNError()) { <small class="fx-field-error indent">{{ topNError() }}</small> }
+                    @else { <p class="fx-hint indent fx-topn">{{ topNStatement() }}</p> }
                   }
                 </div>
               }
@@ -325,7 +394,7 @@
                   }
                   @for (param of parameters(); track $index; let i = $index) {
                     <div class="fx-param">
-                      <input [ngModel]="param.paramId" (ngModelChange)="updateParameter(i, 'paramId', $event)" aria-label="ID" />
+                      <input [ngModel]="param.paramId" (ngModelChange)="updateParameter(i, 'paramId', $event)" aria-label="ID" [class.invalid]="!!paramIdError(i)" />
                       <input [ngModel]="param.label" (ngModelChange)="updateParameter(i, 'label', $event)" aria-label="Label" />
                       <select [ngModel]="param.dataType" (ngModelChange)="updateParameter(i, 'dataType', $event)" aria-label="Type">
                         <option value="String">String</option>
@@ -336,6 +405,7 @@
                       <input [ngModel]="param.defaultValue" (ngModelChange)="updateParameter(i, 'defaultValue', $event)" aria-label="Default" />
                       <button class="fx-icon-btn sm" (click)="removeParameter(i)"><mat-icon>close</mat-icon></button>
                     </div>
+                    @if (paramIdError(i)) { <small class="fx-field-error">{{ paramIdError(i) }}</small> }
                     @if (param.dataType === 'String' || param.dataType === 'Number') {
                       <div class="fx-param-src">
                         <span>Values from field</span>
@@ -367,7 +437,7 @@
             </div>
 
             <!-- Presentation -->
-            <div class="fx-section">
+            <div class="fx-section" data-presentation>
               <button class="fx-band" (click)="toggleSection('layout')" [attr.aria-expanded]="isOpen('layout')">
                 <mat-icon class="chev">{{ isOpen('layout') ? 'expand_more' : 'chevron_right' }}</mat-icon>
                 <h6>Layout</h6>
@@ -402,6 +472,7 @@
                         </button>
                       }
                     </div>
+                    @if (chartCapped()) { <p class="fx-hint">Charts plot at most 50 categories; the first 50 rows are shown. Summary-only mode usually reads better.</p> }
                     @if (previewResult() && previewResult()!.data.length > 0) {
                       <div class="fx-row">
                         <span class="fx-label">Label Field (X-Axis)</span>
@@ -484,7 +555,7 @@
             </div>
 
             <!-- Highlight rules -->
-            <div class="fx-section">
+            <div class="fx-section" data-presentation>
               <button class="fx-band" (click)="toggleSection('format')" [attr.aria-expanded]="isOpen('format')">
                 <mat-icon class="chev">{{ isOpen('format') ? 'expand_more' : 'chevron_right' }}</mat-icon>
                 <h6>Conditional Formatting</h6>
@@ -495,8 +566,11 @@
                   @if (previewColumns().length === 0) {
                     <p class="fx-hint">Run a preview first to add formatting rules.</p>
                   } @else {
+                    <p class="fx-hint">Rules apply in order; the first match wins.</p>
                     @for (rule of conditionalFormats(); track $index; let i = $index) {
+                      <div class="fx-widget">
                       <div class="fx-rule">
+                        <span class="fx-rule-num">{{ i + 1 }}</span>
                         <select class="w-field" [ngModel]="rule.targetColumn" (ngModelChange)="updateConditionalFormat(i, 'targetColumn', $event)">
                           @for (col of previewColumns(); track col) { <option [value]="col">{{ col }}</option> }
                         </select>
@@ -518,6 +592,18 @@
                         <input class="w-color" type="color" [value]="rule.textColor || '#1d2939'" (input)="updateConditionalFormat(i, 'textColor', $any($event.target).value)" matTooltip="Text" />
                         <button class="fx-icon-btn sm" (click)="removeConditionalFormat(i)"><mat-icon>close</mat-icon></button>
                       </div>
+                      <div class="fx-rule">
+                        <span class="fx-by">Apply to</span>
+                        <select class="w-op" [ngModel]="rule.appliesTo || 'both'" (ngModelChange)="updateConditionalFormat(i, 'appliesTo', $event)" aria-label="Rows the rule applies to">
+                          <option value="both">Detail and summary rows</option>
+                          <option value="detail">Detail rows only</option>
+                          <option value="summary">Summary rows only</option>
+                        </select>
+                        <span class="spacer"></span>
+                        <button class="fx-icon-btn sm fx-plain" (click)="moveRule(i, -1)" [disabled]="i === 0" aria-label="Move rule up"><mat-icon>arrow_upward</mat-icon></button>
+                        <button class="fx-icon-btn sm fx-plain" (click)="moveRule(i, 1)" [disabled]="i === conditionalFormats().length - 1" aria-label="Move rule down"><mat-icon>arrow_downward</mat-icon></button>
+                      </div>
+                      </div>
                     }
                     <button class="fx-link" (click)="addConditionalFormat()"><mat-icon>format_paint</mat-icon> Add Rule</button>
                   }
@@ -526,7 +612,7 @@
             </div>
 
             <!-- Drill-through -->
-            <div class="fx-section">
+            <div class="fx-section" data-presentation>
               <button class="fx-band" (click)="toggleSection('drill')" [attr.aria-expanded]="isOpen('drill')">
                 <mat-icon class="chev">{{ isOpen('drill') ? 'expand_more' : 'chevron_right' }}</mat-icon>
                 <h6>Drill-Through</h6>
@@ -578,21 +664,39 @@
           <div class="fx-band static">
             <h6>Results</h6>
             @if (previewResult()) {
-              <span class="fx-band-sum">
-                {{ previewResult()!.totalCount | number }} rows · {{ previewResult()!.executionTimeMs }} ms
-                @if (previewResult()!.truncated) { · <span class="fx-warn">Truncated</span> }
-              </span>
               <span class="spacer"></span>
-              <label class="fx-live" matTooltip="Re-run the preview after every change">
-                <input type="checkbox" [checked]="autoPreview()" (change)="toggleAutoPreview()" /> Live preview
-              </label>
-              <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportExcel()"><mat-icon>grid_on</mat-icon>Excel</button>
-              <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportCsv()"><mat-icon>description</mat-icon>CSV</button>
-              <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportPdf()"><mat-icon>picture_as_pdf</mat-icon>PDF</button>
+              <span [matTooltip]="exportDisabledReason()">
+                <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportExcel()" [disabled]="!!exportDisabledReason()"><mat-icon>grid_on</mat-icon>Excel</button>
+              </span>
+              <span [matTooltip]="exportDisabledReason()">
+                <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportCsv()" [disabled]="!!exportDisabledReason()"><mat-icon>description</mat-icon>CSV</button>
+              </span>
+              <span [matTooltip]="exportDisabledReason()">
+                <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportPdf()" [disabled]="!!exportDisabledReason()"><mat-icon>picture_as_pdf</mat-icon>PDF</button>
+              </span>
             }
           </div>
 
           <div class="fx-results-body">
+            @if (showIssues() && issues().length) {
+              <div class="fx-error" role="alert">
+                <mat-icon>rule</mat-icon>
+                <div class="fx-issues">
+                  <b>Fix {{ issues().length === 1 ? 'this' : 'these' }} before running:</b>
+                  @for (it of issues(); track $index) {
+                    <button class="fx-issue" (click)="goToIssue(it.section)">{{ it.message }}</button>
+                  }
+                </div>
+                <button class="fx-icon-btn sm" (click)="showIssues.set(false)" aria-label="Dismiss"><mat-icon>close</mat-icon></button>
+              </div>
+            }
+            @if (reportError(); as e) {
+              <div class="fx-error" role="alert">
+                <mat-icon>error</mat-icon>
+                <span>{{ e.message }} <small class="fx-ref">Reference {{ e.reference }}</small></span>
+                <button class="fx-icon-btn sm" (click)="reportError.set(null)" aria-label="Dismiss"><mat-icon>close</mat-icon></button>
+              </div>
+            }
             @if (errorMessage()) {
               <div class="fx-error" role="alert">
                 <mat-icon>error</mat-icon>
@@ -600,11 +704,19 @@
                 <button class="fx-icon-btn sm" (click)="errorMessage.set(null)" aria-label="Dismiss"><mat-icon>close</mat-icon></button>
               </div>
             }
+            @if (stale() && previewResult() && !loading()) {
+              <div class="fx-outdated" role="status">
+                <mat-icon>update</mat-icon>
+                <span>Settings changed since this preview. The result below is out of date.</span>
+                <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="runPreview()"><mat-icon>play_arrow</mat-icon>Run Preview</button>
+              </div>
+            }
 
             @if (loading() && !previewResult()) {
               <div class="fx-loading"><mat-spinner diameter="28"></mat-spinner> Running report…</div>
             } @else if (previewResult()) {
               <div class="fx-result-stack" [class.fx-stale]="loading()" aria-live="polite">
+              @if (loading()) { <div class="fx-hint"><mat-spinner diameter="14" class="fx-inline-spin"></mat-spinner> Running report…</div> }
               @if (!dashboardEnabled()) {
                 @if (layoutType() !== 'Table') {
                   <div class="fx-card chart">
@@ -616,7 +728,7 @@
                   </div>
                 }
                 @if (layoutType() !== 'Chart') {
-                  <ng-container *ngTemplateOutlet="gridTpl"></ng-container>
+                  <app-result-grid [result]="previewResult()!" [columns]="previewColumns()" [config]="gridConfig()" [runAt]="runAt()" [stale]="stale()" (drill)="onCellClick($event.row, $event.col)" />
                 }
               } @else {
                 <div class="fx-dash" [style.grid-template-columns]="'repeat(' + dashboardColumns() + ', minmax(0, 1fr))'">
@@ -624,7 +736,7 @@
                     <div class="fx-card" [style.grid-column]="'span ' + (dashboardLayout()[i]?.colSpan || 1)">
                       <div class="fx-card-title">{{ widget.title }}</div>
                       @if (widget.type === 'Grid') {
-                        <ng-container *ngTemplateOutlet="gridTpl"></ng-container>
+                        <app-result-grid [result]="previewResult()!" [columns]="previewColumns()" [config]="gridConfig()" [runAt]="runAt()" [stale]="stale()" (drill)="onCellClick($event.row, $event.col)" />
                       } @else if (getWidgetChartConfig(widget); as w) {
                         <div class="chart"><canvas baseChart [type]="w.type" [data]="w.data" [options]="w.options"></canvas></div>
                       } @else {
@@ -662,11 +774,14 @@
           </button>
         </span>
         <button class="fx-btn fx-btn-secondary" (click)="quickSave()" [disabled]="!selectedFields().length">
-          <mat-icon>save</mat-icon> Save
+          <mat-icon>save</mat-icon> {{ isOthersReport() ? 'Save a Copy' : 'Save' }}
         </button>
-        @if (currentReportId()) {
+        @if (currentReportId() && !isOthersReport()) {
           <button class="fx-btn fx-btn-secondary" (click)="openSaveDialog()" [disabled]="!selectedFields().length">Save As...</button>
         }
+        <span [matTooltip]="publishDisabledReason()">
+          <button class="fx-btn fx-btn-secondary" (click)="openPublishDialog()" [disabled]="!!publishDisabledReason()"><mat-icon>publish</mat-icon> Publish</button>
+        </span>
         <span class="fx-stat" [class.dirty]="dirty() && selectedFields().length">
           @if (dirty() && selectedFields().length) { Unsaved changes }
           @else if (currentReportId()) { All changes saved }
@@ -678,6 +793,7 @@
       <!-- ============ Saved reports library ============ -->
       <div class="fx-tabs" role="tablist">
         <button role="tab" [class.active]="libraryTab() === 'reports'" (click)="libraryTab.set('reports')">My Reports</button>
+        <button role="tab" [class.active]="libraryTab() === 'shared'" (click)="libraryTab.set('shared')">Shared with me</button>
         <button role="tab" [class.active]="libraryTab() === 'templates'" (click)="libraryTab.set('templates')">Templates</button>
       </div>
       <div class="fx-filterbar">
@@ -705,21 +821,28 @@
                 <th>Name</th>
                 <th>Module</th>
                 <th>Description</th>
+                @if (libraryTab() !== 'templates') { <th>{{ libraryTab() === 'shared' ? 'Shared by' : 'Shared with' }}</th> }
                 <th>Modified</th>
                 <th class="actions"></th>
               </tr>
             </thead>
             <tbody>
               @for (r of libraryRows(); track r.reportId) {
-                <tr (dblclick)="libraryTab() === 'reports' ? loadReport(r.reportId) : cloneTemplate(r.reportId)">
-                  <td class="strong">{{ r.name }}</td>
+                <tr (dblclick)="libraryTab() !== 'templates' ? loadReport(r.reportId) : cloneTemplate(r.reportId)">
+                  <td class="strong">{{ r.name }}@if (r.version && r.version > 1) { <small class="fx-sub-cell">v{{ r.version }}</small> }</td>
                   <td>{{ moduleName(r.moduleId) }}</td>
                   <td class="muted">{{ r.description }}</td>
+                  @if (libraryTab() === 'shared') { <td>{{ r.ownerName }}</td> }
+                  @if (libraryTab() === 'reports') { <td>{{ r.sharedWith?.length ? r.sharedWith!.length + (r.sharedWith!.length === 1 ? ' person' : ' people') + ' (read-only)' : 'Not shared' }}</td> }
                   <td>{{ r.modifiedAt | date: 'dd/MM/yyyy HH:mm' }}</td>
                   <td class="actions">
                     @if (libraryTab() === 'reports') {
                       <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="loadReport(r.reportId)">Load</button>
+                      <button class="fx-icon-btn sm fx-plain" (click)="openVersions(r)" matTooltip="Version history"><mat-icon>history</mat-icon></button>
                       <button class="fx-icon-btn sm danger" (click)="deleteReport(r.reportId)" matTooltip="Delete"><mat-icon>delete_outline</mat-icon></button>
+                    } @else if (libraryTab() === 'shared') {
+                      <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="loadReport(r.reportId)">Open</button>
+                      <button class="fx-icon-btn sm fx-plain" (click)="openVersions(r)" matTooltip="Version history"><mat-icon>history</mat-icon></button>
                     } @else {
                       <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="cloneTemplate(r.reportId)">Use template</button>
                     }
@@ -728,7 +851,7 @@
               }
               @if (libraryRows().length === 0) {
                 <tr><td [attr.colspan]="6" class="fx-grid-empty">
-                  {{ librarySearch() || libraryModuleId() ? 'No reports match these filters.' : libraryTab() === 'reports' ? 'No saved reports found.' : 'No templates available.' }}
+                  {{ librarySearch() || libraryModuleId() ? 'No reports match these filters.' : libraryTab() === 'reports' ? 'No saved reports found.' : libraryTab() === 'shared' ? 'Nobody has shared a report with you yet.' : 'No templates available.' }}
                 </td></tr>
               }
             </tbody>
@@ -738,55 +861,6 @@
     }
 </main>
 
-<!-- Shared data grid -->
-<ng-template #gridTpl>
-  <div class="fx-grid-wrap">
-    <table class="fx-grid">
-      <thead>
-        <tr>
-          <th class="rownum">#</th>
-          @for (col of previewColumns(); track col) { <th>{{ col }}</th> }
-        </tr>
-      </thead>
-      <tbody>
-        @for (row of previewResult()!.data; track $index; let r = $index) {
-          <tr>
-            <td class="rownum">{{ r + 1 }}</td>
-            @for (col of previewColumns(); track col) {
-              <td [ngStyle]="getCellStyle(row[col], col)"
-                  [class.num]="isNumber(row[col])"
-                  [class.drillable]="!!getDrillThroughForColumn(col)"
-                  (click)="onCellClick(row, col)">{{ formatCellValue(row[col], col) }}</td>
-            }
-          </tr>
-        }
-        @if (previewResult()!.data.length === 0) {
-          <tr><td [attr.colspan]="previewColumns().length + 1" class="fx-grid-empty">No matching records found.</td></tr>
-        }
-      </tbody>
-      @if (totals(); as t) {
-        <tfoot>
-          <tr>
-            <td class="rownum total-label">Total</td>
-            @for (col of previewColumns(); track col) {
-              @if (t[col]) {
-                <td class="num" [matTooltip]="t[col].note || ''">
-                  {{ t[col].value === null ? '—' : formatCellValue(t[col].value, col) }}
-                </td>
-              } @else {
-                <td></td>
-              }
-            }
-          </tr>
-        </tfoot>
-      }
-    </table>
-    @if (totals() && previewResult()!.truncated) {
-      <div class="fx-total-note">Total covers the first {{ previewResult()!.data.length | number }} of {{ previewResult()!.totalCount | number }} rows.</div>
-    }
-  </div>
-</ng-template>
-
 <!-- Save dialog -->
 <ng-template #saveDialogTpl>
   <div class="fx-dialog">
@@ -794,12 +868,26 @@
     <div class="fx-dialog-body">
       <label class="fx-form-field">
         <span>{{ saveDialogIsTemplate() ? 'Template Name' : 'Report Name' }} <i>*</i></span>
-        <input [ngModel]="saveDialogName()" (ngModelChange)="saveDialogName.set($event)" cdkFocusInitial />
+        <input [ngModel]="saveDialogName()" (ngModelChange)="saveDialogName.set($event); saveDialogTouched.set(true)" maxlength="150" cdkFocusInitial />
       </label>
       <label class="fx-form-field">
-        <span>Description</span>
-        <textarea rows="3" [ngModel]="saveDialogDescription()" (ngModelChange)="saveDialogDescription.set($event)"></textarea>
+        <span>Description <small class="fx-count-note">{{ saveDialogDescription().length }} / 500</small></span>
+        <textarea rows="3" [ngModel]="saveDialogDescription()" (ngModelChange)="saveDialogDescription.set($event); saveDialogTouched.set(true)"></textarea>
       </label>
+      @if (saveDialogError() && saveDialogTouched()) { <small class="fx-field-error">{{ saveDialogError() }}</small> }
+      @if (!saveDialogIsTemplate()) {
+        <div class="fx-form-field">
+          <span>Share read-only with</span>
+          <div class="fx-share-list">
+            @for (u of users(); track u.userId) {
+              @if (u.userId !== 'me') {
+                <label class="fx-check"><input type="checkbox" [checked]="saveDialogShareWith().includes(u.userId)" (change)="toggleShare(u.userId)" /> {{ u.name }} <small class="muted">{{ u.department }}</small></label>
+              }
+            }
+          </div>
+          <small class="fx-hint">They can run it and save their own copy, but can't change yours.</small>
+        </div>
+      }
       <label class="fx-check">
         <input type="checkbox" [checked]="saveDialogIsTemplate()" (change)="saveDialogIsTemplate.set(!saveDialogIsTemplate())" /> Save as template
       </label>
@@ -808,7 +896,7 @@
       }
     </div>
     <div class="fx-dialog-foot">
-      <button class="fx-btn fx-btn-primary" [mat-dialog-close]="'save'" [disabled]="!saveDialogName().trim()">{{ saveDialogIsTemplate() ? 'Save Template' : 'Save' }}</button>
+      <button class="fx-btn fx-btn-primary" [mat-dialog-close]="'save'" [disabled]="!!saveDialogError()">{{ saveDialogIsTemplate() ? 'Save Template' : 'Save' }}</button>
       <button class="fx-btn fx-btn-secondary" mat-dialog-close>Cancel</button>
     </div>
   </div>
@@ -881,6 +969,12 @@
           @for (e of newEntities(); track e.entityId) { <option [ngValue]="e.entityId">{{ e.entityName }}</option> }
         </select>
       </label>
+      @if (newEntityInfo(); as ei) {
+        <div class="fx-entity-info">
+          <b>One row is {{ ei.rowMeaning }}.</b>
+          <span>{{ ei.description }}</span>
+        </div>
+      }
       @if (newTemplates().length) {
         <div class="fx-tpl-block">
           <span class="fx-tpl-cap">Templates</span>
@@ -895,6 +989,102 @@
     </div>
     <div class="fx-dialog-foot">
       <button class="fx-btn fx-btn-primary" (click)="createNewReport()" [disabled]="!newModuleId() || !newEntityId()">Create Report</button>
+      <button class="fx-btn fx-btn-secondary" mat-dialog-close>Cancel</button>
+    </div>
+  </div>
+</ng-template>
+
+<!-- Publish (PRD 6.11) -->
+<ng-template #publishTpl>
+  <div class="fx-dialog" role="dialog" aria-modal="true">
+    <div class="fx-dialog-head">Publish “{{ currentReportName() }}”</div>
+    <div class="fx-dialog-body">
+      <label class="fx-form-field">
+        <span>Module <i>*</i></span>
+        <select [ngModel]="pubModuleId()" (ngModelChange)="pubModuleId.set($event); pubError.set('')">
+          @for (m of modules(); track m.moduleId) { <option [ngValue]="m.moduleId">{{ m.moduleName }}</option> }
+        </select>
+        <small class="fx-hint">Colleagues find it in this module's report list.</small>
+      </label>
+      <div class="fx-form-field">
+        <span>Publish as</span>
+        <label class="fx-radio"><input type="radio" name="pubType" [checked]="pubType() === 'live'" (change)="pubType.set('live'); pubError.set('')" />
+          <span><b>Live report</b><small>Re-runs with current data each time it's opened. Readers enter their own parameters and can export, but can't edit it.</small></span></label>
+        <label class="fx-radio"><input type="radio" name="pubType" [checked]="pubType() === 'snapshot'" (change)="pubType.set('snapshot'); pubError.set('')" />
+          <span><b>Snapshot</b><small>Stores the result of this run with its label, run time and parameter values. Never re-run, so it suits period-end reporting.</small></span></label>
+      </div>
+      @if (pubType() === 'snapshot') {
+        <label class="fx-form-field">
+          <span>Label <i>*</i></span>
+          <input [ngModel]="pubLabel()" (ngModelChange)="pubLabel.set($event); pubError.set('')" placeholder="September 2026 close" maxlength="100" />
+          @if (runAt()) { <small class="fx-hint">Stores the preview run at {{ runAt() | date: 'dd MMM yyyy HH:mm' }}.</small> }
+        </label>
+      }
+      @if (pubError()) { <small class="fx-field-error">{{ pubError() }}</small> }
+    </div>
+    <div class="fx-dialog-foot">
+      <button class="fx-btn fx-btn-primary" (click)="publish()" [disabled]="pubBusy()"><mat-icon>publish</mat-icon> Publish</button>
+      <button class="fx-btn fx-btn-secondary" mat-dialog-close>Cancel</button>
+    </div>
+  </div>
+</ng-template>
+
+<!-- Version history -->
+<ng-template #versionsTpl>
+  <div class="fx-dialog" role="dialog" aria-modal="true">
+    <div class="fx-dialog-head">Versions of “{{ versionsFor() }}”</div>
+    <div class="fx-dialog-body">
+      <p class="fx-hint">Each save records a new version.</p>
+      <table class="fx-grid">
+        <thead><tr><th>Version</th><th>Saved</th><th>By</th><th>Change</th></tr></thead>
+        <tbody>
+          @for (v of versions(); track v.version) {
+            <tr><td>v{{ v.version }}</td><td>{{ v.savedAt | date: 'dd MMM yyyy HH:mm' }}</td><td>{{ v.savedBy }}</td><td class="muted">{{ v.changeDescription }}</td></tr>
+          } @empty { <tr><td colspan="4" class="fx-grid-empty">Loading…</td></tr> }
+        </tbody>
+      </table>
+    </div>
+    <div class="fx-dialog-foot"><button class="fx-btn fx-btn-secondary" mat-dialog-close>Close</button></div>
+  </div>
+</ng-template>
+
+<!-- Request a missing column (PRD 9) -->
+<ng-template #requestTpl>
+  <div class="fx-dialog" role="dialog" aria-modal="true">
+    <div class="fx-dialog-head">Request a column</div>
+    <div class="fx-dialog-body">
+      @if (reqRef()) {
+        <div class="fx-notice ok"><mat-icon>check_circle</mat-icon><span>Request sent to the reporting administrator. Your reference is <b>{{ reqRef() }}</b>.</span></div>
+      } @else {
+        <p class="fx-hint">{{ moduleName(selectedModuleId()) }} › {{ entityName() }}. Describe the data you need and what it's for.</p>
+        <label class="fx-form-field">
+          <span>What's missing <i>*</i></span>
+          <textarea rows="4" [ngModel]="reqText()" (ngModelChange)="reqText.set($event)" placeholder="Referral source for each registered patient, to count referrals per doctor"></textarea>
+        </label>
+        @if (reqText() && reqText().trim().length < 5) { <small class="fx-field-error">Add a little more detail.</small> }
+      }
+    </div>
+    <div class="fx-dialog-foot">
+      @if (!reqRef()) { <button class="fx-btn fx-btn-primary" (click)="submitColumnRequest()" [disabled]="reqText().trim().length < 5">Send Request</button> }
+      <button class="fx-btn fx-btn-secondary" mat-dialog-close>{{ reqRef() ? 'Close' : 'Cancel' }}</button>
+    </div>
+  </div>
+</ng-template>
+
+<!-- Reason for exporting restricted columns -->
+<ng-template #exportReasonTpl let-data>
+  <div class="fx-dialog" role="dialog" aria-modal="true">
+    <div class="fx-dialog-head">Export restricted data</div>
+    <div class="fx-dialog-body">
+      <p>This report includes restricted columns: <b>{{ restrictedColumns().join(', ') }}</b>. Give a reason for the export. It's stored with the audit record.</p>
+      <label class="fx-form-field">
+        <span>Reason <i>*</i></span>
+        <textarea rows="3" [ngModel]="exportReason()" (ngModelChange)="exportReason.set($event); exportReasonTouched.set(true)" placeholder="Contact list for the vaccination recall campaign"></textarea>
+      </label>
+      @if (exportReasonTouched() && exportReason().trim().length < 5) { <small class="fx-field-error">Enter a reason.</small> }
+    </div>
+    <div class="fx-dialog-foot">
+      <button class="fx-btn fx-btn-primary" [mat-dialog-close]="'export'" [disabled]="exportReason().trim().length < 5">Export</button>
       <button class="fx-btn fx-btn-secondary" mat-dialog-close>Cancel</button>
     </div>
   </div>

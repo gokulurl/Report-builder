@@ -15,6 +15,9 @@ import {
   UpdateSavedReportRequest,
   ReportScheduleDto,
   SaveScheduleRequest,
+  AppUser,
+  ReportVersionDto,
+  PublicationDto,
 } from '../models/report.models';
 
 @Injectable({ providedIn: 'root' })
@@ -122,5 +125,41 @@ export class ReportApiService {
 
   runScheduleNow(id: string): Observable<ReportScheduleDto> {
     return this.http.post<ApiResponse<ReportScheduleDto>>(`${this.base}/schedules/${id}/run`, {}).pipe(map((r) => r.data));
+  }
+
+  // ---- Sharing, versions, publishing, requests (PRD 6.11, 9) ----
+
+  getUsers(): Observable<AppUser[]> {
+    return this.http.get<ApiResponse<AppUser[]>>(`${this.base}/users`).pipe(map((r) => r.data));
+  }
+
+  getVersions(reportId: string): Observable<ReportVersionDto[]> {
+    return this.http.get<ApiResponse<ReportVersionDto[]>>(`${this.base}/saved/${reportId}/versions`).pipe(map((r) => r.data));
+  }
+
+  getPublications(): Observable<PublicationDto[]> {
+    return this.http.get<ApiResponse<PublicationDto[]>>(`${this.base}/publications`).pipe(map((r) => r.data));
+  }
+
+  publish(req: Omit<PublicationDto, 'publicationId' | 'publishedBy' | 'publishedAt'>): Observable<PublicationDto> {
+    return this.http.post<ApiResponse<PublicationDto>>(`${this.base}/publications`, req).pipe(map((r) => r.data));
+  }
+
+  /** Reversible: the publication is marked removed and an audit record is written. */
+  removePublication(id: string): Observable<PublicationDto> {
+    return this.http.delete<ApiResponse<PublicationDto>>(`${this.base}/publications/${id}`).pipe(map((r) => r.data));
+  }
+
+  restorePublication(id: string): Observable<PublicationDto> {
+    return this.http.post<ApiResponse<PublicationDto>>(`${this.base}/publications/${id}/restore`, {}).pipe(map((r) => r.data));
+  }
+
+  requestColumn(req: { moduleId: number | null; entityId: number | null; request: string }): Observable<{ reference: string }> {
+    return this.http.post<ApiResponse<{ reference: string }>>(`${this.base}/column-requests`, req).pipe(map((r) => r.data));
+  }
+
+  /** Stores the reason given for exporting restricted columns (PRD 7, Export). */
+  auditExport(req: { reportName: string; format: string; reason: string; columns: string[] }): Observable<{ reference: string }> {
+    return this.http.post<ApiResponse<{ reference: string }>>(`${this.base}/audit/export`, req).pipe(map((r) => r.data));
   }
 }

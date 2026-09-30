@@ -1,6 +1,7 @@
 // Dev-only demo dataset shaped like the Medinous Fusion HMS modules.
 // Used by the mock API interceptor when the .NET reporting API is not running.
 import {
+  PublicationDto,
   ReportScheduleDto,
   ReportModule,
   ReportEntity,
@@ -41,14 +42,14 @@ export const MODULES: ReportModule[] = [
 ];
 
 export const ENTITIES: (ReportEntity & { moduleId: number })[] = [
-  { entityId: 1, moduleId: 1, entityName: 'Patients', objectType: 'View' },
-  { entityId: 2, moduleId: 1, entityName: 'Patient Visits', objectType: 'View' },
-  { entityId: 3, moduleId: 2, entityName: 'Patient Bills', objectType: 'View' },
-  { entityId: 4, moduleId: 2, entityName: 'Receipts', objectType: 'View' },
-  { entityId: 5, moduleId: 3, entityName: 'Lab Orders', objectType: 'View' },
-  { entityId: 6, moduleId: 4, entityName: 'Admissions', objectType: 'View' },
-  { entityId: 7, moduleId: 5, entityName: 'Surgeries', objectType: 'View' },
-  { entityId: 8, moduleId: 6, entityName: 'Dispensing', objectType: 'View' },
+  { entityId: 1, moduleId: 1, entityName: 'Patients', objectType: 'View', description: 'Registered patients with demographics, contact, registration and activity columns.', rowMeaning: 'a registered patient' },
+  { entityId: 2, moduleId: 1, entityName: 'Patient Visits', objectType: 'View', description: 'Outpatient visits with date, type, department, doctor and status.', rowMeaning: 'a visit' },
+  { entityId: 3, moduleId: 2, entityName: 'Patient Bills', objectType: 'View', description: 'OP bills with sponsor, amounts and payment status.', rowMeaning: 'a bill' },
+  { entityId: 4, moduleId: 2, entityName: 'Receipts', objectType: 'View', description: 'Receipts against bills, with payment mode and cashier.', rowMeaning: 'a receipt' },
+  { entityId: 5, moduleId: 3, entityName: 'Lab Orders', objectType: 'View', description: 'Lab test orders with section, priority, specimen status and turnaround.', rowMeaning: 'a lab test order' },
+  { entityId: 6, moduleId: 4, entityName: 'Admissions', objectType: 'View', description: 'Inpatient admissions with ward, bed category and length of stay.', rowMeaning: 'an admission' },
+  { entityId: 7, moduleId: 5, entityName: 'Surgeries', objectType: 'View', description: 'Surgery cases with procedure, theatre, team and duration.', rowMeaning: 'a surgery case' },
+  { entityId: 8, moduleId: 6, entityName: 'Dispensing', objectType: 'View', description: 'OP pharmacy dispensing lines with drug, quantity and amount.', rowMeaning: 'a dispensed item' },
 ];
 
 const NUM_AGGS = ['Count', 'Sum', 'Avg', 'Min', 'Max'];
@@ -63,7 +64,7 @@ function f(
   label: string,
   category: string,
   dataType: 'String' | 'Number' | 'Date' | 'Boolean',
-  opts: { desc?: string; computed?: boolean; groupable?: boolean; aggs?: string[] } = {}
+  opts: { desc?: string; computed?: boolean; groupable?: boolean; aggs?: string[]; related?: boolean; restricted?: boolean } = {}
 ) {
   FIELDS.push({
     fieldId: fid++,
@@ -79,6 +80,8 @@ function f(
     isSortable: true,
     isGroupable: opts.groupable ?? dataType !== 'Number',
     isComputed: !!opts.computed,
+    isRelated: !!opts.related,
+    isRestricted: !!opts.restricted,
     allowedAggregations:
       opts.aggs ?? (dataType === 'Number' ? NUM_AGGS : dataType === 'Date' ? DATE_AGGS : STR_AGGS),
   });
@@ -91,7 +94,7 @@ f(1, 'Gender', 'Gender', 'Demographics', 'String');
 f(1, 'DateOfBirth', 'Date of Birth', 'Demographics', 'Date');
 f(1, 'Age', 'Age (Years)', 'Demographics', 'Number', { computed: true });
 f(1, 'Nationality', 'Nationality', 'Demographics', 'String');
-f(1, 'MobileNo', 'Mobile No', 'Contact', 'String');
+f(1, 'MobileNo', 'Mobile No', 'Contact', 'String', { restricted: true, desc: 'Restricted: exporting asks for a reason' });
 f(1, 'City', 'City', 'Contact', 'String');
 f(1, 'PatientType', 'Patient Type', 'Registration', 'String', { desc: 'Cash, Insurance or Corporate' });
 f(1, 'RegistrationDate', 'Registration Date', 'Registration', 'Date');
@@ -171,6 +174,12 @@ f(8, 'DrugCategory', 'Drug Category', 'Item', 'String');
 f(8, 'Quantity', 'Quantity', 'Item', 'Number');
 f(8, 'Amount', 'Amount', 'Financial', 'Number');
 f(8, 'Pharmacist', 'Pharmacist', 'Dispense', 'String');
+
+// Related, pre-resolved columns (PRD 5.2) — appended so earlier field ids stay stable
+f(1, 'LatestVisitDate', 'Latest Visit Date', 'Activity', 'Date', { related: true, desc: 'Derived from visit history' });
+f(1, 'VisitCount12m', 'Visit Count, 12 months', 'Activity', 'Number', { related: true, desc: 'Derived from visit history' });
+f(1, 'OutstandingBalance', 'Outstanding Balance', 'Activity', 'Number', { related: true, desc: 'Derived from billing' });
+f(3, 'SponsorCategory', 'Sponsor Category', 'Sponsor', 'String', { related: true, desc: 'From the sponsor master' });
 
 export function fieldIdOf(entityId: number, sys: string): number {
   return FIELDS.find((x) => x.entityId === entityId && x.systemFieldName === sys)!.fieldId;
@@ -400,6 +409,25 @@ for (const v of visits) {
 }
 ROWS[8] = dispensing;
 
+// Related values, one per row
+for (const p of patients) {
+  const vs = visits.filter((v) => v['PatientId'] === p['PatientId']);
+  p['LatestVisitDate'] = vs.length ? vs.map((v) => v['VisitDate']).sort().at(-1) : null;
+  p['VisitCount12m'] = vs.filter((v) => v['VisitDate'] >= daysAgo(365)).length;
+  p['OutstandingBalance'] = Math.round(bills.filter((b) => b['PatientId'] === p['PatientId'] && b['BillStatus'] !== 'Paid')
+    .reduce((s, b) => s + (b['BillStatus'] === 'Part Paid' ? b['PatientShare'] / 2 : b['PatientShare']), 0) * 1000) / 1000;
+}
+for (const b of bills) b['SponsorCategory'] = b['Sponsor'] === 'Self Pay' ? 'Cash' : b['Sponsor'] === 'Bapco Corporate' ? 'Corporate' : 'Insurance';
+
+export const USERS = [
+  { userId: 'me', name: 'Gokul M', department: 'Administration' },
+  { userId: 'rasool', name: 'Pattan Rasool', department: 'IT' },
+  { userId: 'thulasi', name: 'Thulasiram R', department: 'IT' },
+  { userId: 'saravana', name: 'Saravana Kumar', department: 'Finance' },
+  { userId: 'murali', name: 'Murali P S', department: 'Management' },
+  { userId: 'asma', name: 'Asma (Reception)', department: 'Front Office' },
+];
+
 // ---------- seeded saved reports ----------
 const F = fieldIdOf;
 const now = new Date().toISOString();
@@ -408,7 +436,7 @@ export const SEED_REPORTS: SavedReportDetailDto[] = [
     reportId: 'rpt-daily-collection',
     name: 'Daily Collection by Payment Mode',
     description: 'Receipt totals per payment mode, for the cash counter close.',
-    moduleId: 2, ownerId: 'me', isShared: true, isTemplate: false, createdAt: now, modifiedAt: now,
+    moduleId: 2, ownerId: 'me', ownerName: 'Gokul M', isShared: true, isTemplate: false, createdAt: now, modifiedAt: now,
     configuration: {
       title: 'Daily Collection by Payment Mode', moduleId: 2, mode: 'preview', layoutType: 'ChartAndTable',
       parameters: [
@@ -417,13 +445,13 @@ export const SEED_REPORTS: SavedReportDetailDto[] = [
         { paramId: 'cashier', label: 'Cashier', dataType: 'String', defaultValue: '', entityFieldId: F(4, 'Cashier') },
         { paramId: 'mode', label: 'Payment mode', dataType: 'String', defaultValue: '', entityFieldId: F(4, 'PaymentMode') },
       ],
-      chartConfig: { chartType: 'bar', labelField: 'Payment Mode', dataFields: ['Total Amount Received'] },
+      chartConfig: { chartType: 'bar', labelField: 'Payment Mode', dataFields: ['Total of Amount Received'] },
       dataConfiguration: {
         primaryEntityId: 4,
         selectedFields: [
           { fieldId: F(4, 'PaymentMode'), label: 'Payment Mode' },
           { fieldId: F(4, 'ReceiptNo'), label: 'Count of Receipt No', aggregate: 'Count' },
-          { fieldId: F(4, 'Amount'), label: 'Total Amount Received', aggregate: 'Sum', formatPattern: 'n2' },
+          { fieldId: F(4, 'Amount'), label: 'Total of Amount Received', aggregate: 'Sum', formatPattern: 'n2' },
         ],
         groupings: [F(4, 'PaymentMode')],
         filterGroup: { logic: 'and', filters: [
@@ -439,7 +467,7 @@ export const SEED_REPORTS: SavedReportDetailDto[] = [
     reportId: 'rpt-op-visits-dept',
     name: 'OP Visits by Department',
     description: 'Consulted visits and average wait per department.',
-    moduleId: 1, ownerId: 'me', isShared: false, isTemplate: false, createdAt: now, modifiedAt: now,
+    moduleId: 1, ownerId: 'me', ownerName: 'Gokul M', isShared: false, isTemplate: false, createdAt: now, modifiedAt: now,
     configuration: {
       title: 'OP Visits by Department', moduleId: 1, mode: 'preview', layoutType: 'Table',
       parameters: [
@@ -447,13 +475,13 @@ export const SEED_REPORTS: SavedReportDetailDto[] = [
         { paramId: 'toDate', label: 'To date', dataType: 'Date', defaultValue: '2026-09-24' },
         { paramId: 'visitType', label: 'Visit type', dataType: 'String', defaultValue: '', entityFieldId: F(2, 'VisitType') },
       ],
-      conditionalFormats: [{ targetColumn: 'Average Wait Time (min)', operator: 'gt', value: '40', backgroundColor: '#fdecea', textColor: '#b42318' }],
+      conditionalFormats: [{ targetColumn: 'Average of Wait Time (min)', operator: 'gt', value: '40', backgroundColor: '#fdecea', textColor: '#b42318' }],
       dataConfiguration: {
         primaryEntityId: 2,
         selectedFields: [
           { fieldId: F(2, 'Department'), label: 'Department' },
           { fieldId: F(2, 'VisitNo'), label: 'Count of Visit No', aggregate: 'Count' },
-          { fieldId: F(2, 'WaitMinutes'), label: 'Average Wait Time (min)', aggregate: 'Avg', formatPattern: 'n0' },
+          { fieldId: F(2, 'WaitMinutes'), label: 'Average of Wait Time (min)', aggregate: 'Avg', formatPattern: 'n0' },
         ],
         groupings: [F(2, 'Department')],
         filterGroup: { logic: 'and', filters: [
@@ -469,7 +497,7 @@ export const SEED_REPORTS: SavedReportDetailDto[] = [
     reportId: 'rpt-unpaid-bills',
     name: 'Outstanding OP Bills',
     description: 'Unpaid and part-paid bills with patient details.',
-    moduleId: 2, ownerId: 'me', isShared: true, isTemplate: false, createdAt: now, modifiedAt: now,
+    moduleId: 2, ownerId: 'me', ownerName: 'Gokul M', isShared: true, isTemplate: false, createdAt: now, modifiedAt: now,
     configuration: {
       title: 'Outstanding OP Bills', moduleId: 2, mode: 'preview', layoutType: 'Table',
       parameters: [
@@ -499,18 +527,86 @@ export const SEED_REPORTS: SavedReportDetailDto[] = [
     },
   },
   {
+    reportId: 'rpt-revenue-sponsor',
+    name: 'Revenue by Sponsor',
+    description: 'Bills under each sponsor with a subtotal per sponsor and a grand total.',
+    moduleId: 2, ownerId: 'me', ownerName: 'Gokul M', isShared: false, isTemplate: false, createdAt: now, modifiedAt: now,
+    configuration: {
+      title: 'Revenue by Sponsor', moduleId: 2, mode: 'preview', layoutType: 'Table',
+      parameters: [
+        { paramId: 'fromDate', label: 'From date', dataType: 'Date', defaultValue: '2026-09-01' },
+        { paramId: 'toDate', label: 'To date', dataType: 'Date', defaultValue: '2026-09-24' },
+      ],
+      dataConfiguration: {
+        primaryEntityId: 3,
+        groupingMode: 'detail',
+        selectedFields: [
+          { fieldId: F(3, 'Sponsor'), label: 'Sponsor' },
+          { fieldId: F(3, 'BillNo'), label: 'Bill No', aggregate: 'Count' },
+          { fieldId: F(3, 'Department'), label: 'Department' },
+          { fieldId: F(3, 'NetAmount'), label: 'Net Amount', aggregate: 'Sum', formatPattern: 'c2' },
+        ],
+        groupings: [F(3, 'Sponsor')],
+        filterGroup: { logic: 'and', filters: [{ fieldId: F(3, 'BillDate'), operator: 'between', value: ['@fromDate', '@toDate'] }] },
+        sortings: [{ fieldId: F(3, 'NetAmount'), direction: 'DESC' }],
+      },
+    },
+  },
+  {
+    reportId: 'rpt-rasool-lab',
+    name: 'Critical Lab Results',
+    description: 'Critical results by section. Shared with you by Pattan Rasool.',
+    moduleId: 3, ownerId: 'rasool', ownerName: 'Pattan Rasool', isShared: true, sharedWith: ['me'], isTemplate: false, createdAt: now, modifiedAt: now,
+    configuration: {
+      title: 'Critical Lab Results', moduleId: 3, mode: 'preview', layoutType: 'Table',
+      dataConfiguration: {
+        primaryEntityId: 5,
+        selectedFields: [
+          { fieldId: F(5, 'OrderNo'), label: 'Order No' },
+          { fieldId: F(5, 'OrderDate'), label: 'Order Date', formatPattern: 'medium' },
+          { fieldId: F(5, 'TestName'), label: 'Test Name' },
+          { fieldId: F(5, 'Section'), label: 'Lab Section' },
+          { fieldId: F(5, 'Priority'), label: 'Priority' },
+        ],
+        filterGroup: { logic: 'and', filters: [{ fieldId: F(5, 'IsCritical'), operator: 'eq', value: true }] },
+        sortings: [{ fieldId: F(5, 'OrderDate'), direction: 'DESC' }],
+      },
+    },
+  },
+  {
+    reportId: 'rpt-withdrawn',
+    name: 'Patient Registrations (old)',
+    description: 'Saved before the Referral Source column was withdrawn from the catalogue.',
+    moduleId: 1, ownerId: 'me', ownerName: 'Gokul M', isShared: false, isTemplate: false, createdAt: now, modifiedAt: now,
+    configuration: {
+      title: 'Patient Registrations (old)', moduleId: 1, mode: 'preview', layoutType: 'Table',
+      dataConfiguration: {
+        primaryEntityId: 1,
+        selectedFields: [
+          { fieldId: F(1, 'PatientId'), label: 'Patient ID' },
+          { fieldId: F(1, 'FullName'), label: 'Patient Name' },
+          { fieldId: 9001, label: 'Referral Source' },
+          { fieldId: F(1, 'RegistrationDate'), label: 'Registration Date' },
+          { fieldId: F(1, 'OutstandingBalance'), label: 'Outstanding Balance', formatPattern: 'c2' },
+          { fieldId: F(1, 'LatestVisitDate'), label: 'Latest Visit Date' },
+        ],
+        sortings: [{ fieldId: F(1, 'RegistrationDate'), direction: 'DESC' }],
+      },
+    },
+  },
+  {
     reportId: 'tpl-lab-tat',
     name: 'Lab Turnaround by Section',
     description: 'Average and worst TAT per lab section. Start here for any TAT report.',
-    moduleId: 3, ownerId: 'admin', isShared: true, isTemplate: true, createdAt: now, modifiedAt: now,
+    moduleId: 3, ownerId: 'admin', ownerName: 'Reporting Admin', isShared: true, isTemplate: true, createdAt: now, modifiedAt: now,
     configuration: {
       title: 'Lab Turnaround by Section', moduleId: 3, mode: 'preview', layoutType: 'ChartAndTable',
-      chartConfig: { chartType: 'bar', labelField: 'Lab Section', dataFields: ['Average Turnaround Time (min)'] },
+      chartConfig: { chartType: 'bar', labelField: 'Lab Section', dataFields: ['Average of Turnaround Time (min)'] },
       dataConfiguration: {
         primaryEntityId: 5,
         selectedFields: [
           { fieldId: F(5, 'Section'), label: 'Lab Section' },
-          { fieldId: F(5, 'TatMinutes'), label: 'Average Turnaround Time (min)', aggregate: 'Avg', formatPattern: 'n0' },
+          { fieldId: F(5, 'TatMinutes'), label: 'Average of Turnaround Time (min)', aggregate: 'Avg', formatPattern: 'n0' },
         ],
         groupings: [F(5, 'Section')],
       },
@@ -520,7 +616,7 @@ export const SEED_REPORTS: SavedReportDetailDto[] = [
     reportId: 'tpl-ot-utilisation',
     name: 'Theatre Utilisation',
     description: 'Completed cases and theatre minutes per OT.',
-    moduleId: 5, ownerId: 'admin', isShared: true, isTemplate: true, createdAt: now, modifiedAt: now,
+    moduleId: 5, ownerId: 'admin', ownerName: 'Reporting Admin', isShared: true, isTemplate: true, createdAt: now, modifiedAt: now,
     configuration: {
       title: 'Theatre Utilisation', moduleId: 5, mode: 'preview', layoutType: 'Table',
       dataConfiguration: {
@@ -528,7 +624,7 @@ export const SEED_REPORTS: SavedReportDetailDto[] = [
         selectedFields: [
           { fieldId: F(7, 'Theatre'), label: 'Theatre' },
           { fieldId: F(7, 'CaseNo'), label: 'Count of OT Case No', aggregate: 'Count' },
-          { fieldId: F(7, 'DurationMinutes'), label: 'Total Duration (min)', aggregate: 'Sum' },
+          { fieldId: F(7, 'DurationMinutes'), label: 'Total of Duration (min)', aggregate: 'Sum' },
         ],
         groupings: [F(7, 'Theatre')],
         filterGroup: { logic: 'and', filters: [{ fieldId: F(7, 'CaseStatus'), operator: 'eq', value: 'Completed' }] },
@@ -550,4 +646,13 @@ export const SEED_SCHEDULES: ReportScheduleDto[] = [
     deliverNotification: true, deliverEmail: false, emails: '', format: 'PDF',
     active: false, nextRun: '2026-10-01T07:30:00', lastRun: '2026-09-01T07:30:00', lastStatus: 'Delivered',
   },
+];
+
+/** Published reports (PRD 6.11): live reports re-run; snapshots hold a stored result. */
+export const SEED_PUBLICATIONS: PublicationDto[] = [
+  { publicationId: 'pub-coll', reportId: 'rpt-daily-collection', reportName: 'Daily Collection by Payment Mode', description: 'Receipt totals per payment mode, for the cash counter close.', moduleId: 2, type: 'live', publishedBy: 'Gokul M', publishedAt: '2026-09-20T09:00:00' },
+  { publicationId: 'pub-out', reportId: 'rpt-unpaid-bills', reportName: 'Outstanding OP Bills', description: 'Unpaid and part-paid bills with patient details.', moduleId: 2, type: 'live', publishedBy: 'Gokul M', publishedAt: '2026-09-20T09:05:00' },
+  { publicationId: 'pub-rev', reportId: 'rpt-revenue-sponsor', reportName: 'Revenue by Sponsor', description: 'Bills under each sponsor with subtotals and a grand total.', moduleId: 2, type: 'live', publishedBy: 'Gokul M', publishedAt: '2026-09-22T10:00:00' },
+  { publicationId: 'pub-opv', reportId: 'rpt-op-visits-dept', reportName: 'OP Visits by Department', description: 'Consulted visits and average wait per department.', moduleId: 1, type: 'live', publishedBy: 'Gokul M', publishedAt: '2026-09-21T11:00:00' },
+  { publicationId: 'pub-reg', reportId: 'rpt-withdrawn', reportName: 'Patient Registrations (old)', description: 'Registered patients with balance and latest visit.', moduleId: 1, type: 'live', publishedBy: 'Gokul M', publishedAt: '2026-09-10T08:00:00' },
 ];

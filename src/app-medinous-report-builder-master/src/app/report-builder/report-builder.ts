@@ -12,7 +12,10 @@ import { CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-
 import { ChartConfiguration, ChartType } from 'chart.js';
 
 import { ReportApiService } from '../services/report-api.service';
-import { ExportService } from '../services/export.service';
+import { ExportService, ReportExport } from '../services/export.service';
+import { ResultGrid } from '../shared/result-grid';
+import { formatValue, summaryLabel, validateFilterValue, validateParamId, toReportError, displayDate, MAX_CHART_CATEGORIES } from '../shared/report-format';
+import { HOSPITAL, mediumDateTime } from '../shared/hospital-settings';
 import {
   ReportModule,
   ReportEntity,
@@ -39,6 +42,10 @@ import {
   DrillThroughConfig,
   DrillThroughMapping,
   SavedReportDetailDto,
+  OPERATORS_BY_TYPE,
+  AppUser,
+  ReportVersionDto,
+  ReportError,
 } from '../models/report.models';
 
 interface FieldSelection {
@@ -54,7 +61,14 @@ interface FilterRow {
   fieldId: number;
   operator: string;
   value: string;
+  /** Second value for Between (PRD 6.4: two inputs, not "a, b") */
+  value2?: string;
 }
+
+/** PRD 7 limits */
+const MAX_FILTERS = 20;
+const MAX_SORTS = 5;
+const MAX_GROUP_LEVELS = 5;
 
 interface JoinConfig {
   relationship: ReportRelationship;
@@ -77,6 +91,7 @@ interface JoinConfig {
     MatDialogModule,
     DragDropModule,
     BaseChartDirective,
+    ResultGrid,
   ],
   templateUrl: './report-builder.html',
   styleUrl: './report-builder.scss',
@@ -84,13 +99,14 @@ interface JoinConfig {
 export class ReportBuilder {
   // Fusion shell navigation
   view = signal<'builder' | 'library'>('builder');
-  libraryTab = signal<'reports' | 'templates'>('reports');
+  libraryTab = signal<'reports' | 'shared' | 'templates'>('reports');
   librarySearch = signal('');
   libraryModuleId = signal<number | null>(null);
   libraryRows = computed(() => {
     const q = this.librarySearch().trim().toLowerCase();
     const mod = this.libraryModuleId();
-    const rows = this.libraryTab() === 'reports' ? this.savedReports() : this.templates();
+    const tab = this.libraryTab();
+    const rows = tab === 'templates' ? this.templates() : this.savedReports().filter((r) => (tab === 'shared') === (r.ownerId !== 'me'));
     return rows.filter(
       (r) =>
         (!mod || r.moduleId === mod) &&
@@ -111,6 +127,40 @@ export class ReportBuilder {
     });
   }
   fieldSearch = signal('');
+
+  // PRD 6.5 grouping mode
+  groupingMode = signal<'summary' | 'detail'>('summary');
+  // PRD 6.8: a run keeps its result on screen; later changes mark it out of date instead of re-running
+  runAt = signal<Date | null>(null);
+  stale = signal(false);
+  reportError = signal<ReportError | null>(null);
+  showIssues = signal(false);
+  // PRD 6.11 withdrawn columns notice, sharing, ownership
+  withdrawn = signal<string[]>([]);
+  currentOwnerId = signal<string>('me');
+  currentOwnerName = signal<string>('');
+  isOthersReport = computed(() => !!this.currentReportId() && this.currentOwnerId() !== 'me');
+  users = signal<AppUser[]>([]);
+  saveDialogShareWith = signal<string[]>([]);
+  saveDialogTouched = signal(false);
+  versions = signal<ReportVersionDto[]>([]);
+  versionsFor = signal('');
+  // PRD 6.11 publish
+  pubModuleId = signal<number | null>(null);
+  pubType = signal<'live' | 'snapshot'>('live');
+  pubLabel = signal('');
+  pubError = signal('');
+  pubBusy = signal(false);
+  // PRD 9: request a missing column
+  reqText = signal('');
+  reqRef = signal('');
+  // Restricted-column export reason
+  exportReason = signal('');
+  exportReasonTouched = signal(false);
+  readonly MAX_FILTERS = MAX_FILTERS;
+  readonly MAX_SORTS = MAX_SORTS;
+  readonly MAX_GROUP_LEVELS = MAX_GROUP_LEVELS;
+  readonly HOSPITAL = HOSPITAL;
 
   modules = signal<ReportModule[]>([]);
   entities = signal<ReportEntity[]>([]);
@@ -218,6 +268,10 @@ export class ReportBuilder {
   saveDialogTpl = viewChild<TemplateRef<any>>('saveDialogTpl');
   loadDialogTpl = viewChild<TemplateRef<any>>('loadDialogTpl');
   paramPromptTpl = viewChild<TemplateRef<any>>('paramPromptTpl');
+  publishTpl = viewChild<TemplateRef<any>>('publishTpl');
+  versionsTpl = viewChild<TemplateRef<any>>('versionsTpl');
+  requestTpl = viewChild<TemplateRef<any>>('requestTpl');
+  exportReasonTpl = viewChild<TemplateRef<any>>('exportReasonTpl');
   newReportTpl = viewChild<TemplateRef<any>>('newReportTpl');
 
   // New Report dialog: module + entity are chosen up front
@@ -232,12 +286,13 @@ export class ReportBuilder {
     const dataFields = this.chartDataFields();
     if (!result || !labelField || dataFields.length === 0) return null;
 
-    const labels = result.data.map((row) => String(row[labelField] ?? ''));
+    const rows = result.data.slice(0, MAX_CHART_CATEGORIES);
+    const labels = rows.map((row) => String(row[labelField] ?? ''));
     const colors = ['#0065cb', '#fe6300', '#2e9d6b', '#7a5af8', '#c99a06', '#0e9fb5', '#b42318', '#64748b', '#1d4ed8', '#0f766e'];
 
     const datasets = dataFields.map((field, i) => ({
       label: field,
-      data: result.data.map((row) => Number(row[field]) || 0),
+      data: rows.map((row) => Number(row[field]) || 0),
       backgroundColor: this.chartType() === 'line'
         ? 'transparent'
         : colors[i % colors.length] + (this.chartType() === 'pie' || this.chartType() === 'doughnut' ? '' : 'cc'),
@@ -247,7 +302,7 @@ export class ReportBuilder {
     }));
 
     if (this.chartType() === 'pie' || this.chartType() === 'doughnut') {
-      const singleData = result.data.map((row) => Number(row[dataFields[0]]) || 0);
+      const singleData = rows.map((row) => Number(row[dataFields[0]]) || 0);
       return {
         type: this.chartType(),
         data: {
@@ -310,6 +365,8 @@ export class ReportBuilder {
     for (const [col, cell] of Object.entries(t)) if (cell.value !== null) out[col] = cell.value;
     return out;
   }
+
+  chartCapped = computed(() => (this.previewResult()?.data.length || 0) > MAX_CHART_CATEGORIES && this.layoutType() !== 'Table');
 
   numericColumns = computed(() =>
     this.previewColumns().filter((col) => {
@@ -387,7 +444,11 @@ export class ReportBuilder {
     );
   }
 
+  groupedCount = computed(() => this.selectedFields().filter((f) => f.grouped).length);
+
   toggleFieldGrouped(fieldId: number) {
+    const fs = this.fieldSelections().find((f) => f.field.fieldId === fieldId);
+    if (fs && !fs.grouped && this.groupedCount() >= MAX_GROUP_LEVELS) return;
     this.fieldSelections.update((fields) =>
       fields.map((f) =>
         f.field.fieldId === fieldId ? { ...f, grouped: !f.grouped } : f
@@ -408,56 +469,27 @@ export class ReportBuilder {
   }
 
   formatCellValue(value: any, col: string): string {
-    if (value == null) return '';
     const fs = this.selectedFields().find((f) => this.columnLabel(f) === col);
-    const joinFs = !fs ? this.joins().flatMap((j) =>
-      j.selectedFieldIds.map((fid) => {
-        const field = j.fields.find((f) => f.fieldId === fid);
-        return field?.displayLabel === col ? field : null;
-      }).filter(Boolean)
-    ) : [];
-    const pattern = fs?.formatPattern || '';
-    const fieldDataType = fs?.field.dataType || (joinFs.length > 0 ? (joinFs[0] as ReportField).dataType : '');
-    if (!pattern) return String(value);
-    return this.applyFormat(value, pattern, fieldDataType);
-  }
-
-  private applyFormat(value: any, pattern: string, dataType: string): string {
-    if (dataType === 'Number' || typeof value === 'number') {
-      const num = typeof value === 'number' ? value : parseFloat(value);
-      if (isNaN(num)) return String(value);
-      switch (pattern) {
-        case 'n0': return num.toLocaleString('en-US', { maximumFractionDigits: 0 });
-        case 'n2': return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        case 'n4': return num.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
-        case 'c0': return num.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-        case 'c2': return num.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
-        case 'p0': return (num * 100).toLocaleString('en-US', { maximumFractionDigits: 0 }) + '%';
-        case 'p2': return (num * 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
-        default: return String(value);
-      }
-    }
-    if (dataType === 'Date' || pattern.match(/^(short|medium|long|iso|datetime)$/)) {
-      const date = new Date(value);
-      if (isNaN(date.getTime())) return String(value);
-      switch (pattern) {
-        case 'short': return date.toLocaleDateString('en-GB');
-        case 'medium': return date.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
-        case 'long': return date.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric' });
-        case 'iso': return date.toISOString().slice(0, 10);
-        case 'datetime': return date.toLocaleDateString('en-GB') + ' ' + date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-        default: return String(value);
-      }
-    }
-    return String(value);
+    return formatValue(value, fs?.formatPattern || undefined);
   }
 
   addConditionalFormat() {
     const cols = this.previewColumns();
     this.conditionalFormats.update((f) => [
       ...f,
-      { targetColumn: cols.length > 0 ? cols[0] : '', operator: 'gt', value: '', backgroundColor: '#ffebee', textColor: '' },
+      { targetColumn: cols.length > 0 ? cols[0] : '', operator: 'gt', value: '', backgroundColor: '#ffebee', textColor: '', appliesTo: 'both' },
     ]);
+  }
+
+  /** Rules apply in order and the first match wins, so order matters. */
+  moveRule(index: number, delta: number) {
+    const to = index + delta;
+    this.conditionalFormats.update((list) => {
+      if (to < 0 || to >= list.length) return list;
+      const next = [...list];
+      [next[index], next[to]] = [next[to], next[index]];
+      return next;
+    });
   }
 
   removeConditionalFormat(index: number) {
@@ -724,12 +756,64 @@ export class ReportBuilder {
     this.api.getRelationships(entityId).subscribe((r) => this.relationships.set(r));
   }
 
+  private allFields() {
+    return [...this.fields(), ...this.joins().flatMap((j) => j.fields)];
+  }
+
+  fieldType(fieldId: number): string {
+    return this.allFields().find((f) => f.fieldId === fieldId)?.dataType || 'String';
+  }
+
   getOperatorsForField(fieldId: number) {
-    const field = this.fields().find((f) => f.fieldId === fieldId);
-    if (!field) return FILTER_OPERATORS;
-    return FILTER_OPERATORS.filter(
-      (op) => !op.dataTypes || op.dataTypes.includes(field.dataType)
-    );
+    return OPERATORS_BY_TYPE[this.fieldType(fieldId)] || OPERATORS_BY_TYPE['String'];
+  }
+
+  operatorLabel(fieldId: number, op: string) {
+    return this.getOperatorsForField(fieldId).find((o) => o.value === op)?.label || op;
+  }
+
+  /** Changing the column resets an operator the new type doesn't offer, and clears values of the wrong type. */
+  onFilterFieldChange(row: FilterRow, list: 'filters' | 'having') {
+    if (!this.getOperatorsForField(row.fieldId).some((o) => o.value === row.operator)) row.operator = 'eq';
+    row.value = '';
+    row.value2 = '';
+    (list === 'filters' ? this.filters : this.havingFilters).update((x) => [...x]);
+  }
+
+  onFilterOperatorChange(row: FilterRow, list: 'filters' | 'having') {
+    if (row.operator === 'relative') row.value = 'Last 30 days';
+    else if (row.value && RELATIVE_DATE_PRESETS.some((p) => p.label === row.value)) row.value = '';
+    (list === 'filters' ? this.filters : this.havingFilters).update((x) => [...x]);
+  }
+
+  filterError(row: FilterRow, having = false): string {
+    const type = having ? 'Number' : this.fieldType(row.fieldId);
+    return validateFilterValue(type, row.operator, row.value, row.value2);
+  }
+
+  /** Put a parameter reference (@id) into a filter value instead of a fixed value. */
+  setFilterParam(row: FilterRow, which: 'value' | 'value2', paramId: string) {
+    if (!paramId) return;
+    row[which] = '@' + paramId;
+    this.filters.update((x) => [...x]);
+    this.markEdited();
+  }
+
+  clearFilterParam(row: FilterRow, which: 'value' | 'value2') {
+    row[which] = '';
+    this.filters.update((x) => [...x]);
+    this.markEdited();
+  }
+
+  isParamRef(v: string | undefined) {
+    return !!v && v.startsWith('@');
+  }
+
+  private toFilterRow(f: FilterDto): FilterRow {
+    if (f.operator === 'between' && Array.isArray(f.value))
+      return { fieldId: f.fieldId, operator: f.operator, value: String(f.value[0] ?? ''), value2: String(f.value[1] ?? '') };
+    if (typeof f.value === 'boolean') return { fieldId: f.fieldId, operator: f.operator, value: String(f.value) };
+    return { fieldId: f.fieldId, operator: f.operator, value: this.filterValueToText(f) };
   }
 
   getFieldLabel(fieldId: number): string {
@@ -742,7 +826,7 @@ export class ReportBuilder {
 
   addFilter() {
     const filterableFields = this.filterableFields();
-    if (filterableFields.length === 0) return;
+    if (filterableFields.length === 0 || this.filters().length >= MAX_FILTERS) return;
     this.filters.update((f) => [
       ...f,
       { fieldId: filterableFields[0].fieldId, operator: 'eq', value: '' },
@@ -767,13 +851,36 @@ export class ReportBuilder {
   }
 
   addSorting() {
-    const sortable = this.sortableFields();
-    if (sortable.length === 0) return;
-    this.sortings.update((s) => [
-      ...s,
-      { fieldId: sortable[0].fieldId, direction: 'ASC' },
-    ]);
+    const used = new Set(this.sortings().map((x) => x.fieldId));
+    const next = this.sortableFields().find((f) => !used.has(f.fieldId));
+    if (!next || this.sortings().length >= MAX_SORTS) return;
+    this.sortings.update((s) => [...s, { fieldId: next.fieldId, direction: 'ASC' }]);
   }
+
+  /** A column can't be sorted twice: each row offers the columns not used by the other rows. */
+  sortOptionsFor(index: number) {
+    const used = new Set(this.sortings().filter((_, i) => i !== index).map((x) => x.fieldId));
+    return this.sortableFields().filter((f) => !used.has(f.fieldId));
+  }
+
+  canAddSort = computed(() => this.sortings().length < MAX_SORTS && this.sortableFields().length > this.sortings().length);
+
+  /** PRD 6.6: say whether Top N ranks rows or groups. */
+  topNStatement = computed(() => {
+    if (!this.topNEnabled()) return '';
+    const fs = this.selectedFields().find((f) => f.field.fieldId === this.topNFieldId());
+    if (!fs) return 'Choose the column to rank by';
+    const groupsRanked = this.hasGroupings() && this.groupingMode() === 'summary';
+    return `${this.topNDirection() === 'top' ? 'Top' : 'Bottom'} ${this.topNCount()} ${groupsRanked ? 'groups' : 'rows'} by ${groupsRanked ? this.columnLabel(fs) : fs.field.displayLabel}`;
+  });
+
+  topNError = computed(() => {
+    if (!this.topNEnabled()) return '';
+    const n = Number(this.topNCount());
+    if (!Number.isInteger(n) || n < 1 || n > 100) return 'Enter a whole number from 1 to 100';
+    if (!this.topNFieldId()) return 'Choose a column to rank by';
+    return '';
+  });
 
   removeSorting(index: number) {
     this.sortings.update((s) => s.filter((_, i) => i !== index));
@@ -848,7 +955,7 @@ export class ReportBuilder {
     let filterGroup: FilterGroupDto | undefined;
     const activeFilters = this.filters().filter((f) => {
       const op = FILTER_OPERATORS.find((o) => o.value === f.operator);
-      return op && (!op.needsValue || f.value.trim() !== '');
+      return op && (!op.needsValue || (f.value.trim() !== '' && (f.operator !== 'between' || (f.value2 ?? '').trim() !== '' || f.value.includes(','))));
     });
 
     if (activeFilters.length > 0) {
@@ -864,7 +971,7 @@ export class ReportBuilder {
     if (this.hasGroupings()) {
       const activeHaving = this.havingFilters().filter((f) => {
         const op = FILTER_OPERATORS.find((o) => o.value === f.operator);
-        return op && (!op.needsValue || f.value.trim() !== '');
+        return op && (!op.needsValue || (f.value.trim() !== '' && (f.operator !== 'between' || (f.value2 ?? '').trim() !== '' || f.value.includes(','))));
       });
       if (activeHaving.length > 0) {
         having = {
@@ -892,6 +999,7 @@ export class ReportBuilder {
       drillThrough: this.drillThroughConfigs().length > 0 ? this.drillThroughConfigs() : undefined,
       dataConfiguration: {
         primaryEntityId: this.selectedEntityId()!,
+        groupingMode: groupings.length ? this.groupingMode() : undefined,
         selectedFields,
         relatedEntities: relatedEntities.length > 0 ? relatedEntities : undefined,
         distinct: this.distinctEnabled() || undefined,
@@ -917,8 +1025,10 @@ export class ReportBuilder {
     } else if (row.operator === 'in' || row.operator === 'notin') {
       value = row.value.split(',').map((v) => v.trim());
     } else if (row.operator === 'between') {
-      const parts = row.value.split(',').map((v) => v.trim());
-      value = parts.length === 2 ? parts : [row.value, row.value];
+      const num = (x: string) => (field?.dataType === 'Number' && !x.startsWith('@') ? Number(x) : x);
+      value = row.value2 !== undefined && row.value2 !== ''
+        ? [num(row.value.trim()), num(row.value2.trim())]
+        : row.value.split(',').map((v) => num(v.trim()));
     } else if (row.operator === 'isnull' || row.operator === 'isnotnull') {
       value = undefined;
     } else if (field?.dataType === 'Number' && !row.value.startsWith('@')) {
@@ -930,11 +1040,53 @@ export class ReportBuilder {
     return { fieldId: row.fieldId, operator: row.operator, value };
   }
 
-  runPreview() {
-    if (this.selectedFields().length === 0) {
-      this.snackBar.open('Select at least one field', 'OK', { duration: 3000 });
+  /** Business rules that must hold before a run (PRD 7). Each issue names the section to fix. */
+  issues = computed(() => {
+    const out: { section: string; message: string }[] = [];
+    const title = this.reportTitle().trim();
+    if (!title || title.length > 150) out.push({ section: 'title', message: 'Enter a report title (up to 150 characters).' });
+    const sel = this.selectedFields();
+    if (!sel.length && !this.joins().some((j) => j.selectedFieldIds.length)) out.push({ section: 'columns', message: 'Select at least one column.' });
+    if (this.hasGroupings()) {
+      if (!sel.some((f) => f.aggregate)) out.push({ section: 'columns', message: 'Set at least one summary when grouping.' });
+      if (this.groupingMode() === 'summary') {
+        const loose = sel.filter((f) => !f.grouped && !f.aggregate).map((f) => f.field.displayLabel);
+        if (loose.length) out.push({ section: 'columns', message: `In summary-only mode, group or summarise every column: ${loose.join(', ')}.` });
+      }
+    }
+    if (this.filters().some((f) => this.filterError(f)) || this.havingFilters().some((f) => this.filterError(f, true)))
+      out.push({ section: 'filters', message: 'Fix the highlighted filter values.' });
+    if (this.topNError()) out.push({ section: 'sort', message: 'Top / Bottom: ' + this.topNError().toLowerCase() + '.' });
+    if (this.parameters().some((_, i) => this.paramIdError(i))) out.push({ section: 'params', message: 'Fix the highlighted parameter identifiers.' });
+    if (this.conditionalFormats().some((r) => !r.targetColumn || r.value === '' || (!r.backgroundColor && !r.textColor)))
+      out.push({ section: 'format', message: 'Each formatting rule needs a column, a value and a colour.' });
+    if (this.drillThroughConfigs().some((d) => !d.sourceColumn || !d.targetReportId || !d.parameterMappings.length))
+      out.push({ section: 'drill', message: 'Each drill-through link needs a target report and at least one parameter mapping.' });
+    return out;
+  });
+
+  saveIssues = computed(() => this.issues().filter((i) => i.section === 'title' || (i.section === 'columns' && i.message.startsWith('Select'))));
+
+  goToIssue(section: string) {
+    if (section === 'title') {
+      (document.querySelector('.fx-title-input') as HTMLInputElement | null)?.focus();
       return;
     }
+    this.openSections.update((s) => new Set([...s, section]));
+  }
+
+  paramIdError(i: number) {
+    const ids = this.parameters().map((p) => p.paramId);
+    return validateParamId(this.parameters()[i]?.paramId || '', ids);
+  }
+
+  runPreview() {
+    if (this.issues().length) {
+      this.showIssues.set(true);
+      for (const i of this.issues()) if (i.section !== 'title') this.openSections.update((s) => new Set([...s, i.section]));
+      return;
+    }
+    this.showIssues.set(false);
     if (this.parameters().length > 0) {
       this.promptParametersThen(() => this.executePreview());
     } else {
@@ -965,12 +1117,15 @@ export class ReportBuilder {
   private executePreview() {
     this.loading.set(true);
     this.errorMessage.set(null);
+    this.reportError.set(null);
     const config = this.buildConfig();
     this.api.preview(config).subscribe({
       next: (res) => {
         this.loading.set(false);
         if (res.success) {
           this.previewResult.set(res.data);
+          this.runAt.set(new Date());
+          this.stale.set(false);
           if (res.data.data.length > 0) {
             this.previewColumns.set(Object.keys(res.data.data[0]));
           } else {
@@ -984,42 +1139,92 @@ export class ReportBuilder {
         }
       },
       error: (err) => {
+        // Plain-language message with a reference; the report the user built is untouched (PRD 6.8)
         this.loading.set(false);
-        const msg = err.error?.errors?.[0] || err.error?.message || 'Preview failed';
-        this.errorMessage.set(msg);
+        this.reportError.set(toReportError(err));
       },
     });
   }
 
+  /** Export needs a current result with at least one row (PRD 7). */
+  exportDisabledReason = computed(() => {
+    const r = this.previewResult();
+    if (!r) return 'Run the preview first';
+    if (!r.data.length) return 'There are no rows to export';
+    if (this.stale()) return 'The result is out of date. Run the preview again first';
+    return '';
+  });
+
+  restrictedColumns = computed(() => [
+    ...this.selectedFields().filter((f) => f.field.isRestricted).map((f) => f.field.displayLabel),
+    ...this.joins().flatMap((j) => j.fields.filter((f) => f.isRestricted && j.selectedFieldIds.includes(f.fieldId)).map((f) => f.displayLabel)),
+  ]);
+
   exportCsv() {
-    // Preview holds every row: export it from the browser so the Total row goes in.
-    // Capped previews still go to the server (full data, no totals).
-    const result = this.previewResult();
-    if (result && !result.truncated) {
-      this.exportService.exportCsv(result.data, this.previewColumns(), this.reportTitle() || 'report', this.exportTotals(), this.exportHeader());
-      return;
-    }
-    if (this.parameters().length > 0) {
-      this.promptParametersThen(() => this.serverExport('csv'));
-    } else {
-      this.serverExport('csv');
-    }
+    this.withExportReason('CSV', () => {
+      const r = this.previewResult()!;
+      if (r.truncated) this.serverExport('csv'); // over the preview limit: the server has the complete result
+      else this.exportService.exportCsvReport(this.buildExport());
+    });
   }
 
   exportExcel() {
-    const result = this.previewResult();
-    if (!result) return;
-    const title = this.reportTitle() || 'report';
-    this.exportService.exportExcel(result.data, this.previewColumns(), title, result.truncated ? undefined : this.exportTotals(), this.exportHeader());
-    this.snackBar.open('Excel exported', 'OK', { duration: 2000 });
+    this.withExportReason('Excel', () => this.exportService.exportExcelReport(this.buildExport()));
   }
 
   exportPdf() {
-    if (this.parameters().length > 0) {
-      this.promptParametersThen(() => this.serverExport('pdf'));
-    } else {
-      this.serverExport('pdf');
-    }
+    this.withExportReason('PDF', () => this.serverExport('pdf'));
+  }
+
+  /** Restricted columns need a stated reason, stored with the audit record, before any export. */
+  private withExportReason(format: string, go: () => void) {
+    if (this.exportDisabledReason()) return;
+    const cols = this.restrictedColumns();
+    if (!cols.length) { go(); return; }
+    const tpl = this.exportReasonTpl();
+    if (!tpl) return;
+    this.exportReason.set('');
+    this.exportReasonTouched.set(false);
+    this.dialog.open(tpl, { width: '460px', data: { format, cols } }).afterClosed().subscribe((ok) => {
+      if (ok !== 'export') return;
+      this.api.auditExport({ reportName: this.reportTitle(), format, reason: this.exportReason().trim(), columns: cols }).subscribe(() => go());
+    });
+  }
+
+  private filterText(f: FilterRow) {
+    const label = this.getFieldLabel(f.fieldId);
+    const op = this.operatorLabel(f.fieldId, f.operator);
+    const show = (v: string) => (v?.startsWith('@') ? this.parameters().find((p) => p.paramId === v.slice(1))?.label || v : displayDate(v));
+    if (f.operator === 'isnull' || f.operator === 'isnotnull') return `${label} ${op.toLowerCase()}`;
+    if (f.operator === 'between') return `${label} between ${show(f.value)} and ${show(f.value2 || '')}`;
+    return `${label} ${op.toLowerCase()} ${show(f.value)}`;
+  }
+
+  /** PRD 6.10 criteria line: filters and parameter values used, who ran it, when. */
+  criteriaLine() {
+    const parts: string[] = [];
+    const fl = this.filters().filter((f) => !this.filterError(f)).map((f) => this.filterText(f));
+    if (fl.length) parts.push('Filters: ' + fl.join(this.filterLogic() === 'and' ? '; ' : ' OR '));
+    if (this.parameters().length)
+      parts.push('Parameters: ' + this.parameters().map((p) => `${p.label || p.paramId} ${p.defaultValue === '' || p.defaultValue == null ? 'All' : displayDate(String(p.defaultValue))}`).join(', '));
+    parts.push(`Run by ${HOSPITAL.userName} on ${mediumDateTime(this.runAt() || new Date())}`);
+    return parts.join(' · ');
+  }
+
+  private buildExport(): ReportExport {
+    const r = this.previewResult()!;
+    const formats: Record<string, string | undefined> = {};
+    for (const f of this.selectedFields()) formats[this.columnLabel(f)] = f.formatPattern || undefined;
+    return {
+      title: (this.reportTitle() || 'Report').trim(),
+      columns: this.previewColumns(),
+      rows: r.data,
+      groups: r.groups,
+      grandTotal: r.grandTotal ?? this.exportTotals() ?? null,
+      formats,
+      criteria: this.criteriaLine(),
+      conditionalFormats: this.conditionalFormats(),
+    };
   }
 
   private buildFullConfig(): ReportConfigurationDto {
@@ -1106,6 +1311,14 @@ export class ReportBuilder {
 
   newReport() {
     this.currentReportId.set(null);
+    this.currentOwnerId.set('me');
+    this.currentOwnerName.set('');
+    this.withdrawn.set([]);
+    this.groupingMode.set('summary');
+    this.stale.set(false);
+    this.runAt.set(null);
+    this.reportError.set(null);
+    this.showIssues.set(false);
     this.currentReportName.set('');
     this.selectedModuleId.set(null);
     this.selectedEntityId.set(null);
@@ -1135,6 +1348,8 @@ export class ReportBuilder {
   }
 
   quickSave() {
+    if (this.saveIssues().length) { this.showIssues.set(true); return; }
+    if (this.isOthersReport()) { this.openSaveDialog(); return; } // someone else's report: save your own copy
     if (this.currentReportId()) {
       const config = this.buildFullConfig();
       this.api.updateReport(this.currentReportId()!, {
@@ -1152,14 +1367,34 @@ export class ReportBuilder {
   openSaveDialog(asTemplate = false) {
     const tpl = this.saveDialogTpl();
     if (!tpl) return;
-    this.saveDialogName.set(this.reportTitle() || '');
+    if (this.saveIssues().length) { this.showIssues.set(true); return; }
+    this.saveDialogName.set(this.isOthersReport() ? 'Copy of ' + (this.currentReportName() || this.reportTitle()) : this.reportTitle() || '');
     this.saveDialogDescription.set('');
     this.saveDialogIsShared.set(false);
+    this.saveDialogShareWith.set([]);
+    this.saveDialogTouched.set(false);
     this.saveDialogIsTemplate.set(asTemplate);
-    const ref = this.dialog.open(tpl, { width: '420px' });
+    this.api.getSavedReports().subscribe((r) => this.savedReports.set(r));
+    if (!this.users().length) this.api.getUsers().subscribe((u) => this.users.set(u));
+    const ref = this.dialog.open(tpl, { width: '460px' });
     ref.afterClosed().subscribe((result) => {
       if (result === 'save') this.performSave();
     });
+  }
+
+  /** Report names are unique per user; descriptions up to 500 characters (PRD 7). */
+  saveDialogError = computed(() => {
+    const name = this.saveDialogName().trim();
+    if (!name) return 'Enter a report name.';
+    if (name.length > 150) return 'Keep the name to 150 characters or fewer.';
+    if (this.savedReports().some((r) => r.ownerId === 'me' && r.name.trim().toLowerCase() === name.toLowerCase()))
+      return 'You already have a report with this name.';
+    if (this.saveDialogDescription().length > 500) return 'Descriptions can be up to 500 characters.';
+    return '';
+  });
+
+  toggleShare(userId: string) {
+    this.saveDialogShareWith.update((l) => (l.includes(userId) ? l.filter((x) => x !== userId) : [...l, userId]));
   }
 
   private performSave() {
@@ -1169,13 +1404,16 @@ export class ReportBuilder {
       name: this.saveDialogName(),
       description: this.saveDialogDescription() || undefined,
       moduleId: this.selectedModuleId()!,
-      isShared: this.saveDialogIsShared(),
+      isShared: this.saveDialogShareWith().length > 0,
+      sharedWith: this.saveDialogShareWith(),
       isTemplate,
       configuration: config,
     }).subscribe({
       next: (saved) => {
         this.currentReportId.set(saved.reportId);
         this.currentReportName.set(saved.name);
+        this.currentOwnerId.set('me');
+        this.currentOwnerName.set(HOSPITAL.userName);
         this.dirty.set(false);
         const label = isTemplate ? 'Template saved' : 'Saved';
         this.snackBar.open(`${label}: ${saved.name}`, 'OK', { duration: 3000 });
@@ -1184,9 +1422,94 @@ export class ReportBuilder {
     });
   }
 
+  // === Publish (PRD 6.11) ===
+
+  publishDisabledReason = computed(() => {
+    if (!this.currentReportId()) return 'Save the report first';
+    if (this.isOthersReport()) return 'Save your own copy to publish it';
+    if (this.dirty()) return 'Save your changes first';
+    return '';
+  });
+
+  openPublishDialog() {
+    const tpl = this.publishTpl();
+    if (!tpl || this.publishDisabledReason()) return;
+    this.pubModuleId.set(this.selectedModuleId());
+    this.pubType.set('live');
+    this.pubLabel.set('');
+    this.pubError.set('');
+    this.dialog.open(tpl, { width: '480px' });
+  }
+
+  publish() {
+    const type = this.pubType();
+    const label = this.pubLabel().trim();
+    if (!this.pubModuleId()) { this.pubError.set('Choose a module.'); return; }
+    if (type === 'snapshot') {
+      if (!label) { this.pubError.set('Give the snapshot a label, for example "September 2026 close".'); return; }
+      if (!this.previewResult() || this.stale()) { this.pubError.set('Run the preview first. A snapshot stores that result.'); return; }
+    }
+    const ranWith = this.parameters().map((p) => ({ label: p.label || p.paramId, value: p.defaultValue === '' || p.defaultValue == null ? 'All' : displayDate(String(p.defaultValue)) }));
+    this.pubBusy.set(true);
+    this.api.publish({
+      reportId: this.currentReportId()!,
+      reportName: this.currentReportName() || this.reportTitle(),
+      description: this.savedReports().find((r) => r.reportId === this.currentReportId())?.description ?? null,
+      moduleId: this.pubModuleId()!,
+      type,
+      label: type === 'snapshot' ? label : undefined,
+      snapshot: type === 'snapshot' ? { result: this.previewResult()!, ranWith, runAt: (this.runAt() || new Date()).toISOString() } : undefined,
+    }).subscribe({
+      next: () => {
+        this.pubBusy.set(false);
+        this.dialog.closeAll();
+        this.snackBar.open(`Published to ${this.moduleName(this.pubModuleId())} as a ${type === 'live' ? 'live report' : 'snapshot'}.`, '', { duration: 3500 });
+      },
+      error: (e) => {
+        this.pubBusy.set(false);
+        this.pubError.set(e?.error?.code === 'DUPLICATE_LABEL' ? 'A snapshot with this label was already published to this module today.' : 'Publishing failed. Try again.');
+      },
+    });
+  }
+
+  openVersions(r: SavedReportDto) {
+    const tpl = this.versionsTpl();
+    if (!tpl) return;
+    this.versionsFor.set(r.name);
+    this.versions.set([]);
+    this.api.getVersions(r.reportId).subscribe((v) => this.versions.set([...v].reverse()));
+    this.dialog.open(tpl, { width: '480px' });
+  }
+
+  openRequestColumn() {
+    const tpl = this.requestTpl();
+    if (!tpl) return;
+    this.reqText.set('');
+    this.reqRef.set('');
+    this.dialog.open(tpl, { width: '460px' });
+  }
+
+  submitColumnRequest() {
+    if (this.reqText().trim().length < 5) return;
+    this.api.requestColumn({ moduleId: this.selectedModuleId(), entityId: this.selectedEntityId(), request: this.reqText().trim() })
+      .subscribe((r) => this.reqRef.set(r.reference));
+  }
+
+  entityInfo = computed(() => this.entities().find((e) => e.entityId === this.selectedEntityId()));
+  newEntityInfo = computed(() => this.newEntities().find((e) => e.entityId === this.newEntityId()));
+
+  /** The report as the results grid and exports see it. */
+  gridConfig = computed(() => {
+    this.stale();
+    this.conditionalFormats();
+    this.drillThroughConfigs();
+    this.fieldSelections();
+    return this.buildFullConfig();
+  });
+
   // === Fusion shell helpers ===
 
-  openLibrary(tab: 'reports' | 'templates' = 'reports') {
+  openLibrary(tab: 'reports' | 'shared' | 'templates' = 'reports') {
     this.libraryTab.set(tab);
     this.view.set('library');
     this.refreshLibrary();
@@ -1254,25 +1577,24 @@ export class ReportBuilder {
 
 
 
-  // === Live preview & unsaved-changes tracking ===
+  // === Unsaved changes and out-of-date results ===
   dirty = signal(false);
-  autoPreview = signal(true);
-  private autoTimer: any = null;
   private drillPicking: ((reportId: string) => void) | null = null;
 
-  /** Any edit in the config panel or context strip marks the report dirty and, with live preview on, re-runs it. */
+  /**
+   * Any edit marks the report unsaved. Data changes also mark the result out of date (it stays on screen);
+   * presentation-only changes (layout, chart, formats, colour rules, drill links) re-render without a re-run.
+   */
   onPanelEvent(ev: Event) {
     const t = ev.target as HTMLElement;
     if (t.closest('.fx-search')) return; // searching the catalogue is not an edit
     if (ev.type === 'click' && !t.closest('.fx-link, .fx-seg button, .fx-chart-types button, .fx-chosen button, .fx-icon-btn')) return;
-    this.markEdited();
+    this.markEdited(!!t.closest('[data-presentation]'));
   }
 
-  private markEdited() {
+  private markEdited(presentationOnly = false) {
     this.dirty.set(true);
-    if (!this.autoPreview() || this.runDisabledReason() || this.parameters().length) return;
-    clearTimeout(this.autoTimer);
-    this.autoTimer = setTimeout(() => this.executePreview(), 350);
+    if (!presentationOnly && this.previewResult()) this.stale.set(true);
   }
 
   /** Column order = chip order. Drag a chip, or focus it and use ← / →. */
@@ -1287,7 +1609,9 @@ export class ReportBuilder {
     const pos = new Map(list.map((f, i) => [f.field.fieldId, i + 1]));
     this.fieldSelections.update((all) => all.map((f) => (pos.has(f.field.fieldId) ? { ...f, order: pos.get(f.field.fieldId)! } : f)));
     this.orderSeq = list.length + 1;
-    this.markEdited();
+    const order = list.map((f) => this.columnLabel(f));
+    this.previewColumns.update((cols) => [...cols].sort((a, b) => (order.indexOf(a) + 1 || 999) - (order.indexOf(b) + 1 || 999)));
+    this.markEdited(true);
   }
 
   onChipKey(e: KeyboardEvent, i: number) {
@@ -1298,10 +1622,6 @@ export class ReportBuilder {
     setTimeout(() => (document.querySelectorAll<HTMLElement>('.fx-chip[cdkDrag], .fx-chip.cdk-drag')[to])?.focus());
   }
 
-  toggleAutoPreview() {
-    this.autoPreview.update((v) => !v);
-    if (this.autoPreview() && !this.runDisabledReason() && !this.parameters().length) this.executePreview();
-  }
 
   private runIfNoPrompts() {
     if (!this.parameters().length && !this.runDisabledReason()) this.executePreview();
@@ -1330,18 +1650,10 @@ export class ReportBuilder {
     return String(f.value);
   }
 
-  /** Summarised columns get a name that says what the number is ("Count of Visit No", not "Visit No"). */
+  /** Summary columns say what the number is ("Total of Net Amount"); detail mode keeps the plain column name. */
   columnLabel(fs: FieldSelection): string {
-    const l = fs.field.displayLabel;
-    switch (fs.aggregate) {
-      case 'Count': return 'Count of ' + l;
-      case 'CountDistinct': return 'Distinct ' + l;
-      case 'Sum': return 'Total ' + l;
-      case 'Avg': return 'Average ' + l;
-      case 'Min': return 'Lowest ' + l;
-      case 'Max': return 'Highest ' + l;
-      default: return l;
-    }
+    if (this.groupingMode() === 'detail' && this.hasGroupings()) return fs.field.displayLabel;
+    return summaryLabel(fs.aggregate, fs.field.displayLabel);
   }
 
   isNumber(v: any) {
@@ -1391,6 +1703,8 @@ export class ReportBuilder {
         this.view.set('builder');
         this.currentReportId.set(detail.reportId);
         this.currentReportName.set(detail.name);
+        this.currentOwnerId.set(detail.ownerId || 'me');
+        this.currentOwnerName.set(detail.ownerName || '');
         this.dirty.set(false);
         this.restoreConfig(detail.configuration, () => this.runIfNoPrompts());
       },
@@ -1462,6 +1776,12 @@ export class ReportBuilder {
 
       this.api.getFields(entityId).subscribe((fields) => {
         this.fields.set(fields);
+        // PRD 6.11: columns withdrawn from the catalogue are listed, and the report opens without them
+        const known = new Set(fields.map((f) => f.fieldId));
+        const missing = config.dataConfiguration.selectedFields.filter((f) => !known.has(f.fieldId));
+        const gone = new Set(missing.map((f) => f.fieldId));
+        this.withdrawn.set(missing.map((f) => f.label || 'Field ' + f.fieldId));
+        this.groupingMode.set(config.dataConfiguration.groupingMode || 'summary');
         const selectedFieldIds = new Set(config.dataConfiguration.selectedFields.map((f) => f.fieldId));
         const savedOrder = new Map(config.dataConfiguration.selectedFields.map((f, i) => [f.fieldId, i + 1]));
         this.orderSeq = savedOrder.size + 1;
@@ -1490,18 +1810,14 @@ export class ReportBuilder {
           const fg = config.dataConfiguration.filterGroup;
           this.filterLogic.set(fg.logic);
           this.filters.set(
-            (fg.filters || []).map((f) => ({
-              fieldId: f.fieldId,
-              operator: f.operator,
-              value: this.filterValueToText(f),
-            }))
+            (fg.filters || []).filter((f) => !gone.has(f.fieldId)).map((f) => this.toFilterRow(f))
           );
         } else {
           this.filters.set([]);
           this.filterLogic.set('and');
         }
 
-        this.sortings.set(config.dataConfiguration.sortings || []);
+        this.sortings.set((config.dataConfiguration.sortings || []).filter((x) => !gone.has(x.fieldId)));
 
         this.distinctEnabled.set(config.dataConfiguration.distinct || false);
 
@@ -1521,11 +1837,7 @@ export class ReportBuilder {
           const hg = config.dataConfiguration.having;
           this.havingLogic.set(hg.logic);
           this.havingFilters.set(
-            (hg.filters || []).map((f) => ({
-              fieldId: f.fieldId,
-              operator: f.operator,
-              value: this.filterValueToText(f),
-            }))
+            (hg.filters || []).filter((f) => !gone.has(f.fieldId)).map((f) => this.toFilterRow(f))
           );
         } else {
           this.havingFilters.set([]);
@@ -1602,20 +1914,9 @@ export class ReportBuilder {
       { paramId: from, label: 'From ' + lbl, dataType: 'Date', defaultValue: iso(new Date(today.getFullYear(), today.getMonth(), 1)) },
       { paramId: to, label: 'To ' + lbl, dataType: 'Date', defaultValue: iso(today) },
     ]);
-    this.filters.update((f) => [...f, { fieldId: field.fieldId, operator: 'between', value: `@${from}, @${to}` }]);
+    this.filters.update((f) => [...f, { fieldId: field.fieldId, operator: 'between', value: '@' + from, value2: '@' + to }]);
     this.openSections.update((s) => new Set([...s, 'filters']));
     this.dirty.set(true);
-  }
-
-  /** Lines printed above the table in Excel/CSV: hospital, report, parameters used, time. */
-  private exportHeader(): string[] {
-    const show = (v: any) => (v === '' || v == null ? 'All' : /^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? String(v).split('-').reverse().join('/') : String(v));
-    return [
-      'Medinous QA Clinic',
-      this.reportTitle() || 'Report',
-      ...this.parameters().map((p) => `${p.label || p.paramId}: ${show(p.defaultValue)}`),
-      `Generated ${new Date().toLocaleString('en-GB')}`,
-    ];
   }
 
   addParameter() {

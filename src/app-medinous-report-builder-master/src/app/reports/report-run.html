@@ -1,5 +1,13 @@
 <div class="fx-page">
-  @if (notFound()) {
+  @if (noLongerAvailable()) {
+    <div class="fx-page-body">
+      <div class="fx-empty">
+        <mat-icon>block</mat-icon>
+        <p>This report is no longer available. It was removed from the module's report list.</p>
+        <button class="fx-btn fx-btn-secondary" (click)="router.navigate(['/reports'])">Back to Reports</button>
+      </div>
+    </div>
+  } @else if (notFound()) {
     <div class="fx-page-body">
       <div class="fx-empty">
         <mat-icon>search_off</mat-icon>
@@ -14,21 +22,46 @@
     <section class="fx-context">
       <div class="fx-ctx-title">
         <button class="fx-crumb" (click)="router.navigate(['/reports'])"><mat-icon>arrow_back</mat-icon>All reports</button>
-        <span class="fx-run-title">{{ report()!.name }}</span>
+        <span class="fx-run-title">
+          {{ report()!.name }}
+          @if (publication(); as pub) {
+            <span class="fx-status" [class.ok]="pub.type === 'live'" [class.snap]="pub.type === 'snapshot'">
+              <mat-icon class="tiny">{{ pub.type === 'live' ? 'sync' : 'photo_camera' }}</mat-icon>{{ pub.type === 'live' ? 'Live report' : 'Snapshot' }}
+            </span>
+          }
+        </span>
         <span class="fx-ctx-sub">{{ moduleName() }}@if (report()!.description) { · {{ report()!.description }} }</span>
       </div>
-      @if (schedule(); as s) {
-        <span class="fx-status" [class.ok]="s.active" [class.off]="!s.active"><mat-icon class="tiny">event_repeat</mat-icon>{{ scheduleText(s) }}</span>
+      @if (!isSnapshot()) {
+        @if (schedule(); as s) {
+          <span class="fx-status" [class.ok]="s.active" [class.off]="!s.active"><mat-icon class="tiny">event_repeat</mat-icon>{{ scheduleText(s) }}</span>
+        }
+        <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="openSchedule()">
+          <mat-icon>event_repeat</mat-icon>{{ schedule() ? 'Edit Schedule' : 'Schedule' }}
+        </button>
       }
-      <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="openSchedule()">
-        <mat-icon>event_repeat</mat-icon>{{ schedule() ? 'Edit Schedule' : 'Schedule' }}
-      </button>
-      <button class="fx-btn fx-btn-ghost fx-btn-sm" (click)="editInBuilder()" matTooltip="Change fields, filters or layout (report designers)">
-        <mat-icon>edit</mat-icon>Edit in Builder
-      </button>
+      @if (canEdit()) {
+        <button class="fx-btn fx-btn-ghost fx-btn-sm" (click)="editInBuilder()" matTooltip="Change fields, filters or layout (report designers)">
+          <mat-icon>edit</mat-icon>Edit in Builder
+        </button>
+      }
     </section>
 
     <div class="fx-page-body">
+      @if (withdrawn().length) {
+        <div class="fx-notice" role="status">
+          <mat-icon>info</mat-icon>
+          <span>This report used columns that are no longer available: <b>{{ withdrawn().join(', ') }}</b>. It runs without them.</span>
+        </div>
+      }
+
+      @if (isSnapshot()) {
+        <div class="fx-notice" role="status">
+          <mat-icon>photo_camera</mat-icon>
+          <span>Snapshot <b>“{{ publication()!.label }}”</b>, run {{ runAt() ? (runAt() | date: 'dd MMM yyyy HH:mm') : '' }} by {{ publication()!.publishedBy }}. It's stored as it was and never re-run.</span>
+        </div>
+      }
+
       <!-- Parameters -->
       @if (controls().length) {
         <div class="fx-panel">
@@ -38,9 +71,42 @@
               @switch (prefilledFrom()) {
                 @case ('last') { Filled in from your last run }
                 @case ('link') { Filled in from the link you followed }
+                @case ('favourite') { Filled in from a favourite }
                 @default { Report defaults }
               }
             </span>
+            <span class="spacer"></span>
+            <div class="fx-fav">
+              <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="favOpen.set(!favOpen())" [attr.aria-expanded]="favOpen()">
+                <mat-icon>star_outline</mat-icon>Favourites @if (favourites().length) { ({{ favourites().length }}) }
+              </button>
+              @if (favOpen()) {
+                <div class="fx-fav-pop" role="dialog" aria-label="Parameter favourites">
+                  @for (f of favourites(); track f.name) {
+                    <div class="fx-fav-row">
+                      @if (favEditing() === f.name) {
+                        <input [ngModel]="favEditName()" (ngModelChange)="favEditName.set($event)" (keydown.enter)="confirmRename()" aria-label="New name" />
+                        <button class="fx-icon-btn sm fx-plain" (click)="confirmRename()" [disabled]="!!renameError()" aria-label="Save name"><mat-icon>check</mat-icon></button>
+                        <button class="fx-icon-btn sm fx-plain" (click)="favEditing.set(null)" aria-label="Cancel rename"><mat-icon>close</mat-icon></button>
+                      } @else {
+                        <button class="fx-fav-apply" (click)="applyFavourite(f)">{{ f.name }}</button>
+                        <button class="fx-icon-btn sm fx-plain" (click)="startRename(f)" matTooltip="Rename"><mat-icon>edit</mat-icon></button>
+                        <button class="fx-icon-btn sm" (click)="deleteFavourite(f)" matTooltip="Delete"><mat-icon>delete_outline</mat-icon></button>
+                      }
+                    </div>
+                    @if (favEditing() === f.name && renameError()) { <small class="fx-field-error">{{ renameError() }}</small> }
+                  } @empty {
+                    <p class="fx-hint">Save the values you use often, like "Last month, Warba", and fill them in with one click.</p>
+                  }
+                  <div class="fx-fav-new">
+                    <input [ngModel]="favName()" (ngModelChange)="favName.set($event)" (keydown.enter)="saveFavourite()"
+                           [placeholder]="suggestFavName() || 'Favourite name'" aria-label="Name for the current values" maxlength="60" />
+                    <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="saveFavourite()" [disabled]="!favName().trim() || !!favNameError()">Save current</button>
+                  </div>
+                  @if (favNameError()) { <small class="fx-field-error">{{ favNameError() }}</small> }
+                </div>
+              }
+            </div>
           </div>
           <div class="fx-pad">
             <div class="fx-run-inputs">
@@ -51,17 +117,17 @@
                       <div class="fx-form-field fx-span2">
                         <span>{{ rangeLabel(c) }} <i>*</i></span>
                         <div class="fx-range">
-                          <input type="date" [ngModel]="values()[c.from.paramId]" (ngModelChange)="setValue(c.from.paramId, $event)" [attr.aria-label]="c.from.label" />
+                          <input type="date" min="1900-01-01" [ngModel]="values()[c.from.paramId]" (ngModelChange)="setValue(c.from.paramId, $event)" [attr.aria-label]="c.from.label" />
                           <span class="fx-hint">to</span>
-                          <input type="date" [ngModel]="values()[c.to.paramId]" (ngModelChange)="setValue(c.to.paramId, $event)" [attr.aria-label]="c.to.label" />
+                          <input type="date" min="1900-01-01" [ngModel]="values()[c.to.paramId]" (ngModelChange)="setValue(c.to.paramId, $event)" [attr.aria-label]="c.to.label" />
                         </div>
                         <div class="fx-presets">
                           @for (p of PRESETS; track p) {
                             <button [class.on]="isPreset(c, p)" (click)="applyPreset(c, p)">{{ p }}</button>
                           }
                         </div>
-                        @if (submitted() && rangeErrors()[c.from.paramId]) {
-                          <small class="fx-field-error">{{ rangeErrors()[c.from.paramId] }}</small>
+                        @if (submitted() && inputErrors()[c.from.paramId]) {
+                          <small class="fx-field-error">{{ inputErrors()[c.from.paramId] }}</small>
                         }
                       </div>
                     }
@@ -90,8 +156,9 @@
                   @default {
                     <label class="fx-form-field">
                       <span>{{ c.param.label || c.param.paramId }}</span>
-                      <input [type]="c.kind === 'date' ? 'date' : c.kind === 'number' ? 'number' : 'text'"
+                      <input [type]="c.kind === 'date' ? 'date' : 'text'" [attr.inputmode]="c.kind === 'number' ? 'decimal' : null"
                              [ngModel]="values()[c.param.paramId]" (ngModelChange)="setValue(c.param.paramId, $event)" />
+                      @if (submitted() && inputErrors()[c.param.paramId]) { <small class="fx-field-error">{{ inputErrors()[c.param.paramId] }}</small> }
                     </label>
                   }
                 }
@@ -115,22 +182,18 @@
       <div class="fx-panel fx-run-results" aria-live="polite">
         <div class="fx-band static">
           <h6>Results</h6>
-          @if (result(); as r) {
-            <span class="fx-band-sum">
-              {{ r.totalCount | number }} rows · {{ r.executionTimeMs }} ms
-              @if (r.truncated) { · <span class="fx-warn">Truncated</span> }
-            </span>
+          @if (result()) {
             <span class="spacer"></span>
-            <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportExcel()"><mat-icon>grid_on</mat-icon>Excel</button>
-            <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportCsv()"><mat-icon>description</mat-icon>CSV</button>
-            <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportPdf()"><mat-icon>picture_as_pdf</mat-icon>PDF</button>
+            <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportExcel()" [disabled]="!!exportDisabledReason()" [matTooltip]="exportDisabledReason()"><mat-icon>grid_on</mat-icon>Excel</button>
+            <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportCsv()" [disabled]="!!exportDisabledReason()" [matTooltip]="exportDisabledReason()"><mat-icon>description</mat-icon>CSV</button>
+            <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="exportPdf()" [disabled]="!!exportDisabledReason()" [matTooltip]="exportDisabledReason()"><mat-icon>picture_as_pdf</mat-icon>PDF</button>
           }
         </div>
 
         <div class="fx-pad fx-run-body">
-          @if (error()) {
+          @if (error(); as e) {
             <div class="fx-error" role="alert">
-              <mat-icon>error</mat-icon><span>{{ error() }}</span>
+              <mat-icon>error</mat-icon><span>{{ e.message }} <small class="fx-ref">Reference {{ e.reference }}</small></span>
               <button class="fx-icon-btn sm" (click)="error.set(null)" aria-label="Dismiss"><mat-icon>close</mat-icon></button>
             </div>
           }
@@ -157,45 +220,11 @@
                 <div class="fx-card chart fx-run-chart">
                   <canvas baseChart [type]="ch.type" [data]="ch.data" [options]="ch.options"></canvas>
                 </div>
+                @if (chartCapped()) { <p class="fx-hint">The chart plots the first 50 categories.</p> }
               }
 
               @if (showTable()) {
-                <div class="fx-grid-wrap fx-run-grid">
-                  <table class="fx-grid">
-                    <thead>
-                      <tr><th class="rownum">#</th>@for (col of columns(); track col) { <th>{{ col }}</th> }</tr>
-                    </thead>
-                    <tbody>
-                      @for (row of r.data; track $index; let i = $index) {
-                        <tr>
-                          <td class="rownum">{{ i + 1 }}</td>
-                          @for (col of columns(); track col) {
-                            <td [ngStyle]="style(row[col], col)" [class.num]="isNum(row[col])" [class.drillable]="!!drillFor(col)"
-                                (click)="drill(row, col)">{{ format(row[col], col) }}</td>
-                          }
-                        </tr>
-                      }
-                      @if (r.data.length === 0) {
-                        <tr><td [attr.colspan]="columns().length + 1" class="fx-grid-empty">No records match these parameters. Try a wider date range.</td></tr>
-                      }
-                    </tbody>
-                    @if (totals(); as t) {
-                      <tfoot>
-                        <tr>
-                          <td class="rownum total-label">Total</td>
-                          @for (col of columns(); track col) {
-                            @if (t[col]) {
-                              <td class="num" [matTooltip]="t[col].note || ''">{{ t[col].value === null ? '—' : format(t[col].value, col) }}</td>
-                            } @else { <td></td> }
-                          }
-                        </tr>
-                      </tfoot>
-                    }
-                  </table>
-                  @if (totals() && r.truncated) {
-                    <div class="fx-total-note">Total covers the first {{ r.data.length | number }} of {{ r.totalCount | number }} rows.</div>
-                  }
-                </div>
+                <app-result-grid [result]="r" [columns]="columns()" [config]="config()!" [runAt]="runAt()" (drill)="drill($event)" />
               }
             </div>
           } @else if (!inBackground() && !error()) {
