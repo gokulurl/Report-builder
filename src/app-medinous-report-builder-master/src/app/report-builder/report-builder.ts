@@ -489,14 +489,15 @@ export class ReportBuilder {
   }
 
   /** Only formats that fit the column: money gets currency, whole numbers stay whole, dates get date formats. */
-  getFormatOptionsForField(field: ReportField) {
+  getFormatOptionsForField(field: ReportField, current = '') {
     if (field.dataType !== 'Number') return FORMAT_OPTIONS.filter((o) => o.dataTypes.includes(field.dataType));
     const allowed: Record<string, string[]> = {
       money: ['', 'c2', 'c0', 'n3', 'n0'],
       integer: ['', 'n0'],
       decimal: ['', 'n0', 'n2', 'n3', 'p0', 'p2'],
     };
-    const keep = allowed[field.numberKind || 'decimal'];
+    // a saved report keeps its existing format visible even if it is no longer offered for this column
+    const keep = [...allowed[field.numberKind || 'decimal'], current];
     return FORMAT_OPTIONS.filter((o) => keep.includes(o.value));
   }
 

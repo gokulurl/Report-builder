@@ -99,10 +99,10 @@
                         </span>
                         <span class="fx-type">{{ fs.field.dataType }}</span>
                       </label>
-                      @if (fs.selected && (fs.field.dataType === 'Number' || fs.field.dataType === 'Date') && getFormatOptionsForField(fs.field).length > 1) {
+                      @if (fs.selected && (fs.field.dataType === 'Number' || fs.field.dataType === 'Date') && getFormatOptionsForField(fs.field, fs.formatPattern).length > 1) {
                         <div class="fx-field-opts">
                           <select data-presentation [ngModel]="fs.formatPattern" (ngModelChange)="setFieldFormatPattern(fs.field.fieldId, $event)" aria-label="Format">
-                            @for (fmt of getFormatOptionsForField(fs.field); track fmt.value) {
+                            @for (fmt of getFormatOptionsForField(fs.field, fs.formatPattern); track fmt.value) {
                               <option [ngValue]="fmt.value">{{ fmt.label }}</option>
                             }
                           </select>
@@ -134,23 +134,24 @@
                   @if (groupedFields().length) {
                     <ol class="fx-group-list">
                       @for (g of groupedFields(); track g.field.fieldId; let gi = $index) {
-                        <li><span class="fx-group-lvl">{{ gi + 1 }}</span>{{ g.field.displayLabel }}
+                        <li><span class="fx-group-lvl">{{ gi + 1 }}</span><span class="fx-group-name">{{ g.field.displayLabel }}</span>
                           <button class="fx-icon-btn sm" (click)="removeGrouping(g.field.fieldId)" [attr.aria-label]="'Stop grouping by ' + g.field.displayLabel"><mat-icon>close</mat-icon></button></li>
                       }
                     </ol>
                   }
-                  @if (groupedFields().length < MAX_GROUP_LEVELS) {
-                    <select class="fx-add-select" (change)="addGrouping($any($event.target).value); $any($event.target).value = ''"
-                            [disabled]="!groupableOptions().length" aria-label="Add a grouping">
-                      <option value="">{{ groupableOptions().length ? (groupedFields().length ? 'Then group by…' : 'Add a grouping…') : 'Select a column that can be grouped first' }}</option>
+                  @if (groupedFields().length >= MAX_GROUP_LEVELS) {
+                    <p class="fx-hint">Up to {{ MAX_GROUP_LEVELS }} grouping levels.</p>
+                  } @else if (!groupableOptions().length) {
+                    <p class="fx-hint">{{ groupedFields().length ? 'No other selected column can be grouped.' : 'None of the selected columns can be grouped. Add one such as a department, status or payment mode.' }}</p>
+                  } @else {
+                    <select class="fx-add-select" (change)="addGrouping($any($event.target).value); $any($event.target).value = ''" aria-label="Add a grouping">
+                      <option value="">{{ groupedFields().length ? 'Then group by…' : 'Add a grouping…' }}</option>
                       @for (o of groupableOptions(); track o.field.fieldId) { <option [value]="o.field.fieldId">{{ o.field.displayLabel }}</option> }
                     </select>
-                  } @else {
-                    <p class="fx-hint">Up to {{ MAX_GROUP_LEVELS }} grouping levels.</p>
                   }
 
                   @if (hasGroupings()) {
-                    <span class="fx-label">Show</span>
+                    <div class="fx-sub">Rows</div>
                     <div class="fx-seg" role="group" aria-label="Grouping mode">
                       <button [class.on]="groupingMode() === 'summary'" (click)="groupingMode.set('summary'); markEdited()">Summary only</button>
                       <button [class.on]="groupingMode() === 'detail'" (click)="groupingMode.set('detail'); markEdited()">Detail with group summaries</button>
@@ -162,7 +163,7 @@
                     </p>
                     <label class="fx-check inline"><input type="checkbox" [checked]="showGrandTotal()" (change)="showGrandTotal.set(!showGrandTotal()); markEdited()" /> Show grand total</label>
                     @if (groupingMode() === 'detail') {
-                      <label class="fx-inline-field">
+                      <label class="fx-row fx-inline-field">
                         <span class="fx-label">Groups start</span>
                         <select [ngModel]="groupsStart()" (ngModelChange)="groupsStart.set($event); markEdited()">
                           <option value="auto">Automatic (expanded for small results)</option>
@@ -172,7 +173,7 @@
                       </label>
                     }
 
-                    <span class="fx-label">Summaries</span>
+                    <div class="fx-sub">Summaries</div>
                     <div class="fx-summary-list">
                       @for (fs of summaryRows(); track fs.field.fieldId) {
                         <div class="fx-summary-row">
@@ -181,7 +182,7 @@
                             <select [ngModel]="fs.aggregate" (ngModelChange)="setFieldAggregate(fs.field.fieldId, $event)" [attr.aria-label]="'Summary for ' + fs.field.displayLabel">
                               @for (agg of summaryOptions(fs); track agg.value) { <option [ngValue]="agg.value">{{ agg.label }}</option> }
                             </select>
-                          } @else { <small class="muted">No summary for this column</small> }
+                          } @else { <small class="muted" matTooltip="Text and date columns can't be summarised here">—</small> }
                         </div>
                       }
                       @for (c of calcs(); track c.name) {
@@ -189,7 +190,7 @@
                       }
                     </div>
                   } @else {
-                    <p class="fx-hint">Summaries (Total, Average, Count…) become available once at least one column is grouped.</p>
+                    <p class="fx-hint">Group by a column to add summaries such as Total, Average or Count.</p>
                   }
                 </div>
               }
