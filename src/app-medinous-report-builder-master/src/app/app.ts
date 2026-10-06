@@ -1,43 +1,41 @@
 import { Component, computed, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
-import { MatTooltipModule } from '@angular/material/tooltip';
 import { filter } from 'rxjs';
-import { NotificationService, AppNotification } from './services/notification.service';
+import { RbStore } from './rb/store';
+import { RbPop } from './rb/ui';
+import { hm } from './rb/engine';
 
-/** Fusion shell: app bar + icon rail around every Reports screen. */
+/** Fusion shell. IT administrators get Dashboard (templates) and Report builder; staff get their module's Dashboard. */
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, MatIconModule, MatTooltipModule, DatePipe],
+  imports: [RouterOutlet, RouterLink, MatIconModule, RbPop],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
 export class App {
+  hm = hm;
   private url = signal('');
-  section = computed(() => {
-    const u = this.url();
-    if (u.startsWith('/schedules')) return 'schedules';
-    if (u.startsWith('/builder')) return u.includes('tab=saved') ? 'saved' : 'builder';
-    return 'reports';
+  section = computed(() => (this.url().startsWith('/it/builder') ? 'builder' : 'dash'));
+  title = computed(() => {
+    if (this.s.role() === 'admin') return this.section() === 'builder' ? 'Report Builder' : 'Reports Dashboard';
+    return 'Reports';
   });
-  title = computed(() => ({ reports: 'Reports', schedules: 'My Schedules', builder: 'Report Builder', saved: 'Report Builder' })[this.section()]);
-  bellOpen = signal(false);
+  bell = signal<HTMLElement | null>(null);
+  who = signal<HTMLElement | null>(null);
+  unread = computed(() => { this.s.rev(); return this.s.notes.filter((n) => !n.read).length; });
 
-  constructor(private router: Router, public notes: NotificationService) {
+  constructor(private router: Router, public s: RbStore) {
     this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe((e) => {
-      this.url.set((e as NavigationEnd).urlAfterRedirects);
-      this.bellOpen.set(false);
+      const u = (e as NavigationEnd).urlAfterRedirects;
+      this.url.set(u);
+      if (!u.startsWith('/result')) s.backStack = []; // "Back to …" only lives across drill-throughs
     });
   }
-
-  toggleBell() {
-    this.bellOpen.update((v) => !v);
-    if (this.bellOpen()) setTimeout(() => this.notes.markAllRead(), 1500);
+  closeBell() { this.bell.set(null); this.s.notes.forEach((n) => (n.read = true)); this.s.bump(); }
+  openNote(res: string) {
+    this.bell.set(null); this.s.notes.forEach((n) => { if (n.res === res) n.read = true; });
+    this.s.toastMsg.set(null); this.s.bump(); this.router.navigate(['/result', res]);
   }
-
-  openNote(n: AppNotification) {
-    this.bellOpen.set(false);
-    if (n.reportId) this.router.navigate(['/reports', n.reportId], { state: { params: n.params, result: n.result, ranWith: n.ranWith } });
-  }
+  switchTo(path: string) { this.who.set(null); this.router.navigate([path]); }
 }

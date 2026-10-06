@@ -87,3 +87,19 @@ All of these are optional additions to the existing DTOs, so the current API kee
 - **Layout saved per report (7.2):** `columnLayout: { widths: {label: px}, nowrap: [labels], pinned: [≤2 labels] }`. Hiding a column and Find are view-only and never saved.
 - **Group limit:** 1,000 groups (was 100); beyond that, return `TOO_MANY_GROUPS`.
 - **PDF page fit (7.4.3):** the builder estimates widths at 22mm for numbers and dates, 20mm for codes, 25mm for short text and 40mm for names, against 180mm portrait or 267mm landscape. It warns but doesn't block; the server PDF should shrink the text rather than cut columns.
+
+## 7. Two-role model (replaces the single builder; sections 1–6 describe the earlier build)
+
+The UI now follows the manager's prototype. Code: `src/app/rb/` (`engine.ts` holds every rule below; `store.ts` holds state). Sample data stands in for the API.
+
+- **Roles.** IT administrators (`/it`) build and publish **templates**. Staff (`/reports`) run them. Criteria (`/run/:kind/:id`) and result (`/result/:id`) screens are shared.
+- **Template = shape only:** `cols, fmt, groups (≤3), sums, show {detail, sub, grand}, start, sorts (≤3), calcs, display {mode, type, label, values, orient}, rules, drill [{col, target}], widths/wrap/pins, scope (fixed "in" restrictions staff cannot remove), summaries (extra summary tabs), expiry (minutes), places (modules), status, removed, heavy`. A template has **no period**.
+- **Data set settings (set once per data set, not per template):** `periodCol`, `noun`, `defaultPeriod`, `maxInteractiveDays` (366), and row `actions`.
+- **A run = template + criteria** `{period, conds, hidden, sorts}`. The effective filter is: scope, then the period on `periodCol`, then the staff's conditions. Staff may hide any column except those that are grouped, summarised, used in a formula or used for drill-through.
+- **Results are cached** by `[templateId, period, conds, hidden, sorts]` for the template's `expiry`. Running the same values again inside that window returns the same result (the UI says so). A result can be **kept** for 7/30/90 days.
+- **Background runs:** heavy templates, and periods longer than `maxInteractiveDays`, go to the background. The UI notifies in-app, and by email link if asked. Cancelling is allowed.
+- **Result tools never re-query:** sort, row filters, anchored columns (≤2), widths, wrap, density, summary tabs, find, saved named views (one can be the default). Row actions apply to selected lines; "single" actions need lines from one invoice.
+- **My versions:** saved criteria per person, with sharing `private | people | module`. A schedule always runs a saved version. Scheduling from the criteria screen saves the on-screen values first.
+- **Formula columns:** add, sub, mul, div, pct. Divide and percent are recalculated from totals on subtotal and grand-total rows.
+- **Restricted columns** (Mobile): exporting asks for a reason, which is recorded.
+- **Grouping limit:** more than 1,000 groups is refused with a message.

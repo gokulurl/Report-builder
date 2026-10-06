@@ -1,19 +1,10 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
 import { provideRouter } from '@angular/router';
-import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
-import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 
 import { routes } from './app.routes';
-import { mockApiInterceptor } from './mock/mock-api.interceptor';
 
+// The report data and engine live in app/rb (sample data in place of the .NET API; see NOTES-for-backend.md).
 export const appConfig: ApplicationConfig = {
-  providers: [
-    provideBrowserGlobalErrorListeners(),
-    provideRouter(routes),
-    // Dev-only mock backend: drop `withInterceptors(...)` to use the .NET API via proxy.conf.json
-    provideHttpClient(withInterceptors([mockApiInterceptor])),
-    provideAnimationsAsync(),
-    provideCharts(withDefaultRegisterables()),
-  ],
+  providers: [provideBrowserGlobalErrorListeners(), provideRouter(routes), provideAnimationsAsync()],
 };

@@ -1,47 +1,47 @@
-<header class="fx-appbar">
+<header class="fx-appbar" [attr.data-rev]="s.rev()">
   <div class="fx-brand"><img src="medinous-logo.svg" alt="Medinous" width="124" height="25" /></div>
   <h4 class="fx-appbar-title">{{ title() }}</h4>
   <span class="spacer"></span>
-  <span class="fx-appbar-ctx">Medinous QA Clinic · Administration</span>
-  <button class="fx-icon-btn fx-bell" (click)="toggleBell()" [attr.aria-expanded]="bellOpen()"
-          [attr.aria-label]="notes.unread() ? notes.unread() + ' new notifications' : 'Notifications'">
+  <span class="fx-appbar-ctx">Medinous QA Clinic · Signed in as {{ s.role() === 'admin' ? 'IT administrator' : 'billing staff' }}</span>
+  <button class="fx-icon-btn fx-bell" (click)="bell.set($any($event.currentTarget))"
+          [attr.aria-label]="unread() ? unread() + ' new notifications' : 'Notifications'" aria-haspopup="menu">
     <mat-icon>notifications_none</mat-icon>
-    @if (notes.unread()) { <span class="fx-bell-dot">{{ notes.unread() }}</span> }
+    @if (unread()) { <span class="fx-bell-dot">{{ unread() }}</span> }
   </button>
-  <button class="fx-icon-btn" matTooltip="Switch module"><mat-icon>apps</mat-icon></button>
-  <span class="fx-avatar" matTooltip="Signed in">GM</span>
-
-  @if (bellOpen()) {
-    <div class="fx-notes" role="dialog" aria-label="Notifications">
-      <div class="fx-notes-head">Notifications</div>
-      @for (n of notes.items(); track n.id) {
-        <button class="fx-note" [class.unread]="!n.read" (click)="openNote(n)">
-          <b>{{ n.title }}</b>
-          <span>{{ n.detail }}</span>
-          <small>{{ n.time | date: 'dd/MM/yyyy HH:mm' }}</small>
-        </button>
-      } @empty {
-        <p class="fx-hint center">You're all caught up.</p>
-      }
-    </div>
-  }
+  <button class="fx-avatar" (click)="who.set($any($event.currentTarget))" aria-haspopup="menu" aria-label="Account">{{ s.role() === 'admin' ? 'IT' : 'GM' }}</button>
 </header>
 
 <div class="fx-body">
   <nav class="fx-rail" aria-label="Reports sections">
-    <a class="fx-rail-item" routerLink="/reports" [class.active]="section() === 'reports'">
-      <mat-icon>summarize</mat-icon><span>Reports</span>
-    </a>
-    <a class="fx-rail-item" routerLink="/schedules" [class.active]="section() === 'schedules'">
-      <mat-icon>event_repeat</mat-icon><span>My Schedules</span>
-    </a>
-    <div class="fx-rail-sep" title="Report design (admins)">Design</div>
-    <a class="fx-rail-item" routerLink="/builder" [class.active]="section() === 'builder'">
-      <mat-icon>query_stats</mat-icon><span>Builder</span>
-    </a>
-    <a class="fx-rail-item" routerLink="/builder" [queryParams]="{ tab: 'saved' }" [class.active]="section() === 'saved'">
-      <mat-icon>folder_open</mat-icon><span>Load Report</span>
-    </a>
+    @if (s.role() === 'admin') {
+      <a class="fx-rail-item" routerLink="/it" [class.active]="section() === 'dash'"><mat-icon>dashboard</mat-icon><span>Dashboard</span></a>
+      <a class="fx-rail-item" routerLink="/it/builder/new" [class.active]="section() === 'builder'"><mat-icon>query_stats</mat-icon><span>Report builder</span></a>
+    } @else {
+      <a class="fx-rail-item" routerLink="/reports" [class.active]="section() === 'dash'"><mat-icon>dashboard</mat-icon><span>Dashboard</span></a>
+    }
   </nav>
   <router-outlet />
 </div>
+
+@if (bell(); as el) {
+  <rb-pop [anchor]="el" (closed)="closeBell()">
+    <div class="rb-mlab">Notifications</div>
+    @for (n of s.notes.slice(0, 8); track n.id) {
+      <button class="rb-mi" (click)="openNote(n.res)"><mat-icon>{{ n.read ? 'check' : 'notifications_none' }}</mat-icon>
+        <span class="grow">{{ n.text }}@if (n.email) {<br /><span class="muted tiny">Also emailed as a link</span>}</span><span class="r">{{ hm(n.at) }}</span></button>
+    } @empty { <div class="rb-mlab">No notifications</div> }
+  </rb-pop>
+}
+@if (who(); as el) {
+  <rb-pop [anchor]="el" (closed)="who.set(null)">
+    <div class="rb-mlab">Prototype: switch who is signed in</div>
+    <button class="rb-mi" [class.on]="s.role() === 'admin'" (click)="switchTo('/it')"><mat-icon>admin_panel_settings</mat-icon>IT administrator</button>
+    <button class="rb-mi" [class.on]="s.role() === 'user'" (click)="switchTo('/reports')"><mat-icon>person</mat-icon>Billing staff</button>
+  </rb-pop>
+}
+@if (s.toastMsg(); as t) {
+  <div class="rb-toast" [class.bad]="t.bad" role="status" aria-live="polite">
+    <mat-icon>{{ t.bad ? 'warning' : 'check_circle' }}</mat-icon><span>{{ t.text }}</span>
+    @if (t.open) { <button class="fx-link" (click)="openNote(t.open)">Open</button> }
+  </div>
+}
