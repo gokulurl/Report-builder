@@ -39,7 +39,11 @@ export interface Share { mode: 'private' | 'people' | 'module'; people: string[]
 export interface MyReport {
   id: string; tid: string; name: string; period: Period; conds: Filter[]; hidden: string[]; sorts: Sort[];
   notify: Notify; openNow: boolean; owner: string; share: Share;
+  /** Staff model: the report's own filters, grouping, folder and list metadata. */
+  clauses?: Clause[]; groups?: string[]; folder?: string | null; fav?: boolean; lastRun?: Date | null; modified?: Date;
 }
+/** A staff filter: chosen values (or everything except them) for text, a from–to range for amounts. No operators. */
+export interface Clause { id: number; field: string; vals: string[]; exclude: boolean; from: string; to: string; touched?: boolean }
 export type Notify = 'none' | 'app' | 'email';
 export interface Criteria { period: Period; conds: Filter[]; hidden: string[]; sorts: Sort[] }
 export interface Spec {
@@ -78,7 +82,7 @@ export const SUMLBL: Record<SumFn, string> = { sum: 'Total', avg: 'Average', min
 export const OPS: Record<CalcOp, string> = { add: '+', sub: '−', mul: '×', div: '÷', pct: 'as % of' };
 export const OPNAME: Record<CalcOp, string> = { add: 'Add', sub: 'Subtract', mul: 'Multiply', div: 'Divide', pct: 'Percent of' };
 export const PRESETS: Record<string, string> = {
-  any: 'Any time', today: 'Today', last7: 'Last 7 days', last30: 'Last 30 days', last90: 'Last 90 days', last365: 'Last 365 days',
+  any: 'Any time', today: 'Today', yesterday: 'Yesterday', last7: 'Last 7 days', last30: 'Last 30 days', last90: 'Last 90 days', last365: 'Last 365 days',
   thismonth: 'This month', lastmonth: 'Last month', thisquarter: 'This quarter', lastquarter: 'Last quarter', thisyear: 'This year',
 };
 export const PHINT: Record<string, string> = { thismonth: '(to date)', thisquarter: '(to date)', thisyear: '(to date)', lastmonth: '(full month)', lastquarter: '(full quarter)' };
@@ -173,10 +177,10 @@ export function fval(c: Col, v: any, fn: SumFn | null, fmt?: Record<string, stri
 const dd = (y: number, m: number, d: number) => new Date(y, m, d);
 export function resolveRange(v: Period | null) {
   if (!v) return null;
-  if (v.preset === 'custom') return { from: v.a ? new Date(v.a) : null, to: v.b ? new Date(v.b) : null, kind: '', label: 'Custom dates' };
+  if (v.preset === 'custom') return { from: v.a ? new Date(v.a) : null, to: v.b ? new Date(v.b) : null, kind: '', label: 'Chosen dates' };
   const T = TODAY, y = T.getFullYear(), m = T.getMonth(), q = Math.floor(m / 3), back = (n: number) => new Date(+T - (n - 1) * 864e5);
   const R: Record<string, [Date, Date, string]> = {
-    today: [T, T, 'roll'], last7: [back(7), T, 'roll'], last30: [back(30), T, 'roll'], last90: [back(90), T, 'roll'], last365: [back(365), T, 'roll'],
+    today: [T, T, 'roll'], yesterday: [new Date(+T - 864e5), new Date(+T - 864e5), ''], last7: [back(7), T, 'roll'], last30: [back(30), T, 'roll'], last90: [back(90), T, 'roll'], last365: [back(365), T, 'roll'],
     thismonth: [dd(y, m, 1), T, 'cal'], lastmonth: [dd(y, m - 1, 1), dd(y, m, 0), ''], thisquarter: [dd(y, q * 3, 1), T, 'cal'],
     lastquarter: [dd(y, q * 3 - 3, 1), dd(y, q * 3, 0), ''], thisyear: [dd(y, 0, 1), T, 'cal'],
   };

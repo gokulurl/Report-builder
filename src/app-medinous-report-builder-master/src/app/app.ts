@@ -29,13 +29,14 @@ export class App {
     this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe((e) => {
       const u = (e as NavigationEnd).urlAfterRedirects;
       this.url.set(u);
-      if (!u.startsWith('/result')) s.backStack = []; // "Back to …" only lives across drill-throughs
     });
   }
   closeBell() { this.bell.set(null); this.s.notes.forEach((n) => (n.read = true)); this.s.bump(); }
-  openNote(res: string) {
-    this.bell.set(null); this.s.notes.forEach((n) => { if (n.res === res) n.read = true; });
-    this.s.toastMsg.set(null); this.s.bump(); this.router.navigate(['/result', res]);
+  /** A note or toast belongs to a report ("rep:m1"); opening it shows that report's results. */
+  openNote(key: string) {
+    this.bell.set(null); this.s.notes.forEach((n) => { if (n.key === key) n.read = true; });
+    this.s.toastMsg.set(null); this.s.bump();
+    const [kind, id] = key.split(':'); this.router.navigate(['/report', kind, id], { queryParams: { tab: 'results' } });
   }
   switchTo(path: string) { this.who.set(null); this.router.navigate([path]); }
 }

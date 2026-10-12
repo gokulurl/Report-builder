@@ -103,3 +103,16 @@ The UI now follows the manager's prototype. Code: `src/app/rb/` (`engine.ts` hol
 - **Formula columns:** add, sub, mul, div, pct. Divide and percent are recalculated from totals on subtotal and grand-total rows.
 - **Restricted columns** (Mobile): exporting asks for a reason, which is recorded.
 - **Grouping limit:** more than 1,000 groups is refused with a message.
+
+
+## 8. Staff side, colleague's prototype (12 Oct 2026): replaces the staff half of section 7
+
+The IT side (templates, builder) is unchanged. Code: `src/app/rb/list.ts`, `doc.ts`, `dialogs.ts`, `staff.ts`.
+
+- **A staff report** stores `{ tid, name, period, clauses[], groups[≤2], hidden[], sorts[≤3], folder, fav, share, lastRun, modified }`. It is created from a template, or copied from one of the person's own reports or one shared with them.
+- **Filters (clauses) have no operators.** A text clause is `{ field, vals[], exclude }` and matches *any* of the values, or none of them when `exclude` is set. An amount clause is `{ field, from?, to? }`, inclusive. Different clauses must all match. Unfinished clauses are ignored in previews and block Run.
+- **Grouping is chosen by staff** (up to 2 levels). If it differs from the template's, totals use each amount column's natural summary (Sum where allowed, else the first allowed; Invoice No. uses Count distinct), and subtotals plus a grand total are shown.
+- **Preview:** the first 10 lines with the current period and filters, before grouping. It needs a cheap endpoint.
+- **Runs are per report.** The last run is kept, and re-running unchanged settings within the template's `expiry` reuses it. If settings change after a run, the result is flagged as out of date.
+- **Schedules** always run the saved settings. Scheduling is refused while there are unsaved changes, and only works on the person's own report.
+- **Folders** are per person. Favourites are per report.

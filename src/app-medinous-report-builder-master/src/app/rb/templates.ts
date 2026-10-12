@@ -62,7 +62,7 @@ export class PublishDialog {
               @if (t.removed) {
                 <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="t.removed = false; s.bump()"><mat-icon>restore</mat-icon>Restore</button>
               } @else {
-                <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="router.navigate(['/run', 'tpl', t.id])"><mat-icon>visibility</mat-icon>Open as staff</button>
+                <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="router.navigate(['/report', 'tpl', t.id])"><mat-icon>visibility</mat-icon>Open as staff</button>
                 <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="router.navigate(['/it/builder', t.id])"><mat-icon>edit</mat-icon>Edit</button>
                 <button class="fx-icon-btn" (click)="menu.set({ t, el: $any($event.currentTarget) })" aria-label="More actions" aria-haspopup="menu"><mat-icon>more_horiz</mat-icon></button>
               }

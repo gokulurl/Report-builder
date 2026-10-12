@@ -1,26 +1,24 @@
 import { Injectable, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import {
-  CalcCol, Criteria, DATASETS, Filter, MyReport, Notify, Period, Row, Sort, Spec, Template, TODAY,
-  colOf, effective, fSummary, periodDays, periodErr, rangeText, rowsFor,
-} from './engine';
+import { CalcCol, DATASETS, Filter, MyReport, Notify, Row, Spec, Template, TODAY, colOf, periodDays, periodErr, rangeText } from './engine';
+import { Doc, buildR, clauseErr, docSentence, evalAll, fromConds } from './staff';
+import { rowsFor } from './engine';
 
 export type Role = 'admin' | 'user';
-export interface Result {
-  id: string; tid: string; key: string; src: string; name: string; crit: Criteria; R: Spec;
-  status: 'running' | 'ready'; t0: number; ranAt: Date; validUntil: Date; stripText: string; rows: Row[];
-  reused: boolean; notify: Notify; ms?: number; savedName?: string; keepUntil?: Date;
-}
 export interface Schedule { id: number; src: string; freq: string; time: string; deliver: string[]; fmt: string; on: boolean }
-export interface Note { id: number; text: string; res: string; at: Date; read: boolean; email: boolean }
-export interface ViewState { sort: Sort | null; rowf: { col: string; vals: string[] }[]; pins: string[]; widths: Record<string, number>; wrap: string[]; density: '' | 'compact'; stab: number }
-export interface LiveView extends ViewState { find: string; only: boolean; page: number; collapsed: string[] | null; active: number | null }
-export interface NamedView { id: number; name: string; def: boolean; state: ViewState }
+/** `key` is the report the note belongs to ("rep:m1" or "tpl:t3"); opening it shows that report's Results tab. */
+export interface Note { id: number; text: string; key: string; at: Date; read: boolean; email: boolean }
+export interface Folder { id: string; name: string }
+/** The open report's working copy. Saved reports keep their own values until Save. */
+export interface DocState extends Doc { kind: 'tpl' | 'rep'; id: string; tid: string; name: string; owner: string; saved: string }
+export interface Run { R: Spec; rows: Row[]; snap: string; at: Date; until: Date; ms: number; sentence: string }
+export interface Job { t0: number; name: string; snap: string }
 
 const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o), (k, v) => (typeof v === 'string' && /^\d{4}-\d\d-\d\dT/.test(v) ? new Date(v) : v));
 let fid = 100, ruid = 1;
 export const nextFilterId = () => fid++;
 export const nextRuleId = () => ruid++;
+export const snapOf = (d: Doc) => JSON.stringify({ period: d.period, clauses: d.clauses.map((c) => ({ field: c.field, vals: c.vals, exclude: c.exclude, from: c.from, to: c.to })), hidden: d.hidden, sorts: d.sorts, groups: d.groups });
 
 const FX = (col: string, vals: string[]): Filter => ({ id: fid++, col, op: 'in', vals, fixed: true });
 const TBASE = (): Template => ({
@@ -38,7 +36,7 @@ export class RbStore {
   readonly role = signal<Role>((sessionStorage.getItem('rb-role') as Role) || 'user');
   readonly toastMsg = signal<{ text: string; open?: string; bad?: boolean } | null>(null);
   private toastTimer: any;
-  private tid = 20; private repid = 1; private resid = 1; private schid = 1; private nid = 1;
+  private tid = 20; private repid = 1; private schid = 1; private nid = 1;
 
   templates: Template[] = [
     T_({ id: 't1', title: 'Revenue by sponsor and revenue type', desc: 'Billed revenue per sponsor, split by revenue type', cols: ['inv', 'date', 'svc', 'qty', 'net'], groups: ['sponsor', 'rtype'], sums: { inv: 'countd', qty: 'sum', net: 'sum' }, start: 'collapsed',
@@ -57,21 +55,27 @@ export class RbStore {
     T_({ id: 't7', title: 'Service lines by department', desc: 'Every billed line with department and doctor', cols: ['inv', 'date', 'pname', 'dept', 'svc', 'doc', 'net'], sums: { net: 'sum' }, sorts: [{ col: 'date', dir: 'desc' }] }),
   ];
   reps: MyReport[] = [
-    { id: 'm' + this.repid++, tid: 't5', name: 'Warba open invoices, last 30 days', period: { preset: 'last30' }, conds: [{ id: fid++, col: 'sponsor', op: 'in', vals: ['Warba'] }], hidden: ['mobile'], sorts: [{ col: 'net', dir: 'desc' }], notify: 'none', openNow: true, owner: 'me', share: { mode: 'people', people: ['Rahul Nair'] } },
+    { id: 'm' + this.repid++, tid: 't5', name: 'Warba open invoices, last 30 days', period: { preset: 'last30' }, conds: [{ id: fid++, col: 'sponsor', op: 'in', vals: ['Warba'] }], hidden: ['mobile'], sorts: [{ col: 'net', dir: 'desc' }], notify: 'none', openNow: true, owner: 'me', share: { mode: 'people', people: ['Rahul Nair'] }, folder: 'fd', fav: true },
     { id: 'm' + this.repid++, tid: 't1', name: 'Radiology revenue, last month', period: { preset: 'lastmonth' }, conds: [{ id: fid++, col: 'rtype', op: 'in', vals: ['Radiology'] }], hidden: [], sorts: [], notify: 'none', openNow: true, owner: 'me', share: { mode: 'private', people: [] } },
-    { id: 'm' + this.repid++, tid: 't4', name: 'Month-end discounts', period: { preset: 'lastmonth' }, conds: [], hidden: [], sorts: [], notify: 'none', openNow: true, owner: 'me', share: { mode: 'private', people: [] } },
-    { id: 'm' + this.repid++, tid: 't5', name: 'Insurance invoices over KD 100', period: { preset: 'last90' }, conds: [{ id: fid++, col: 'scat', op: 'in', vals: ['Insurance'] }, { id: fid++, col: 'net', op: 'gt', a: '100' }], hidden: [], sorts: [{ col: 'net', dir: 'desc' }], notify: 'none', openNow: true, owner: 'Fatima Al Sabah', share: { mode: 'people', people: ['me'] } },
+    { id: 'm' + this.repid++, tid: 't4', name: 'Month-end discounts', period: { preset: 'lastmonth' }, conds: [], hidden: [], sorts: [], notify: 'none', openNow: true, owner: 'me', share: { mode: 'private', people: [] }, folder: 'fm' },
+    { id: 'm' + this.repid++, tid: 't5', name: 'Insurance invoices over KD 100', period: { preset: 'last90' }, conds: [{ id: fid++, col: 'scat', op: 'in', vals: ['Insurance'] }, { id: fid++, col: 'net', op: 'gt', a: '100' }], hidden: [], sorts: [{ col: 'net', dir: 'desc' }], notify: 'none', openNow: true, owner: 'Fatima Al Sabah', share: { mode: 'people', people: ['me'] }, fav: true },
   ];
-  results: Result[] = [];
+  folders: Folder[] = [{ id: 'fd', name: 'Daily checks' }, { id: 'fm', name: 'Month end' }];
   scheds: Schedule[] = [{ id: this.schid++, src: 'm1', freq: 'Working days (Sun to Thu)', time: '07:30', deliver: ['Dashboard', 'In-app notification'], fmt: 'Excel', on: true }];
   notes: Note[] = [];
-  views: Record<string, LiveView> = {};
-  namedViews: Record<string, NamedView[]> = {};
-  fav = new Set(['t1', 't2']);
-  /** Results opened by drill-through, newest last, so the page can offer "Back to …". */
-  backStack: string[] = [];
+  /** Last finished run and any running job, per report key, so a run survives leaving the page. */
+  runs: Record<string, Run> = {};
+  jobs: Record<string, Job> = {};
+  /** The open report's working copy, per key, so switching away and back keeps unsaved changes. */
+  docs: Record<string, DocState> = {};
+  /** Template the person last started from; New report opens on it. */
+  lastTemplate = '';
 
-  constructor(private router: Router) {}
+  constructor(private router: Router) {
+    this.reps.forEach((r, i) => {
+      r.clauses = fromConds(r.conds); r.groups = this.tpl(r.tid).groups.slice(0, 2); r.modified = new Date(2026, 9, 1 + i);
+    });
+  }
 
   bump() { this.rev.update((v) => v + 1); }
   setRole(r: Role) { this.role.set(r); sessionStorage.setItem('rb-role', r); }
@@ -83,85 +87,104 @@ export class RbStore {
 
   tpl(id: string) { return this.templates.find((t) => t.id === id)!; }
   rep(id: string) { return this.reps.find((r) => r.id === id); }
-  res(id: string) { return this.results.find((r) => r.id === id); }
   ds(t: Template) { return DATASETS[t.entity]; }
   periodLabel(t: Template) { return colOf(this.ds(t).periodCol).label; }
-  strip(t: Template, c: Criteria) {
-    const parts = [`${this.periodLabel(t)}: ${rangeText(c.period, true)}`];
-    (c.conds || []).forEach((f) => parts.push(`${colOf(f.col, t.calcs).label} ${fSummary(f, t.calcs)}`));
-    return parts.join(' · ');
-  }
+  noun(t: Template) { return this.ds(t).noun || 'records'; }
   scopeText(t: Template) { return t.scope.map((f) => colOf(f.col).label + ' ' + (f.vals || []).join(', ')).join('; '); }
-  shareText(r: MyReport) {
-    if (r.share.mode === 'private') return ''; if (r.share.mode === 'module') return 'Shared with Billing';
-    const n = r.share.people.length; return `Shared with ${n} ${n === 1 ? 'person' : 'people'}`;
-  }
-  lastResult(src: string) { return this.results.filter((r) => r.src === src).slice(-1)[0]; }
-  forcedBackground(t: Template, p: Period) { return periodDays(p) > this.ds(t).maxInteractiveDays; }
-  expired(r: Result) { return r.status === 'ready' && r.validUntil < new Date() && !r.savedName; }
+  library() { return this.templates.filter((t) => !t.removed && t.status === 'published' && t.places.includes('Billing')); }
 
-  /* ---------- running ---------- */
-  startRun(t: Template, c: Criteria & { notify: Notify; openNow: boolean }, srcId: string, srcName: string): boolean {
-    if (periodErr(c.period)) { this.toast('Set the period first', '', true); return false; }
-    const key = JSON.stringify([t.id, c.period, c.conds, c.hidden, c.sorts]);
-    // Same values inside the validity window reopen the same result instead of querying again
-    const reuse = this.results.find((r) => r.key === key && r.status === 'ready' && !r.savedName && r.validUntil > new Date());
-    if (reuse) { reuse.reused = true; this.router.navigate(['/result', reuse.id]); this.bump(); return true; }
-    const R = effective(t, c);
-    const r: Result = {
-      id: 'res' + this.resid++, tid: t.id, key, src: srcId, name: srcName, crit: clone({ period: c.period, conds: c.conds, hidden: c.hidden, sorts: c.sorts }),
-      R, status: 'running', t0: Date.now(), ranAt: new Date(), validUntil: new Date(Date.now() + t.expiry * 60000), stripText: this.strip(t, c), rows: [], reused: false, notify: c.notify,
-    };
-    this.results.push(r);
-    const finish = () => {
-      if (r.status !== 'running') return;
-      r.rows = rowsFor(R); r.status = 'ready'; r.ranAt = new Date(); r.validUntil = new Date(Date.now() + t.expiry * 60000); r.ms = (Date.now() - r.t0) / 1000;
-      const here = this.router.url === '/result/' + r.id;
-      if (r.notify !== 'none' || !here) this.notes.unshift({ id: this.nid++, text: `${r.name} is ready`, res: r.id, at: new Date(), read: false, email: r.notify === 'email' });
-      if (!here) this.toast(`${r.name} is ready${r.notify === 'email' ? '. A link was also emailed to you' : ''}`, r.id);
-      this.bump();
-    };
-    const dur = t.heavy || this.forcedBackground(t, c.period) ? 15000 : 700;
-    if (c.openNow) this.router.navigate(['/result', r.id]);
-    else { this.router.navigate([this.home()], { queryParams: { tab: 'results' } }); this.toast('Running. You can carry on working; it will be in Results'); }
-    const tick = setInterval(() => { if (r.status !== 'running') { clearInterval(tick); return; } this.bump(); }, 1000);
-    setTimeout(finish, dur);
-    this.bump();
-    return true;
-  }
-  runRep(id: string) {
-    const r = this.rep(id)!; const t = this.tpl(r.tid);
-    this.startRun(t, { period: r.period, conds: r.conds, hidden: r.hidden, sorts: r.sorts, notify: r.notify, openNow: r.openNow }, r.id, r.name);
-  }
-  cancelRun(id: string) {
-    const i = this.results.findIndex((x) => x.id === id); if (i >= 0) this.results.splice(i, 1);
-    this.toast('Run cancelled'); this.bump();
-  }
-
-  /* ---------- views (look only; never re-query) ---------- */
-  viewOf(r: Result): LiveView {
-    const k = r.src;
-    if (!this.views[k]) {
-      const t = this.tpl(r.tid);
-      this.views[k] = { sort: null, rowf: [], pins: [...t.pins], widths: { ...t.widths }, wrap: [...t.wrap], density: '', stab: 0, find: '', only: false, page: 0, collapsed: null, active: null };
-      const d = (this.namedViews[k] || []).find((x) => x.def);
-      if (d) { Object.assign(this.views[k], clone(d.state)); this.views[k].active = d.id; }
+  /* ---------- the open report ---------- */
+  /** Open a report (or a template as a new unsaved one). Keeps any unsaved working copy from earlier. */
+  doc(kind: 'tpl' | 'rep', id: string): DocState {
+    const key = kind + ':' + id;
+    if (!this.docs[key]) {
+      let d: DocState;
+      if (kind === 'rep') {
+        const r = this.rep(id)!;
+        d = { kind, id, tid: r.tid, name: r.name, owner: r.owner, period: clone(r.period), clauses: clone(r.clauses || []), hidden: [...r.hidden], sorts: clone(r.sorts), groups: [...(r.groups || [])], saved: '' };
+      } else {
+        const t = this.tpl(id);
+        d = { kind, id, tid: id, name: t.title, owner: 'me', period: clone(this.ds(t).defaultPeriod), clauses: [], hidden: [], sorts: [], groups: t.groups.slice(0, 2), saved: '' };
+      }
+      d.saved = snapOf(d); this.docs[key] = d;
     }
-    return this.views[k];
+    return this.docs[key];
   }
-  viewState(v: LiveView): ViewState {
-    return clone({ sort: v.sort, rowf: v.rowf, pins: v.pins, widths: v.widths, wrap: v.wrap, density: v.density, stab: v.stab });
-  }
+  keyOf(d: DocState) { return d.kind + ':' + d.id; }
+  dirty(d: DocState) { return snapOf(d) !== d.saved; }
+  errors(d: DocState) { return d.clauses.filter((c) => clauseErr(c)).length + (periodErr(d.period) ? 1 : 0); }
+  forcedBackground(t: Template, d: Doc) { return periodDays(d.period) > this.ds(t).maxInteractiveDays; }
 
-  /* ---------- my versions ---------- */
-  saveAsVersion(tid: string, name: string, c: Criteria & { notify: Notify; openNow: boolean }) {
-    const r: MyReport = { id: 'm' + this.repid++, tid, name, period: clone(c.period), conds: clone(c.conds), hidden: [...c.hidden], sorts: clone(c.sorts), notify: c.notify, openNow: c.openNow, owner: 'me', share: { mode: 'private', people: [] } };
+  /** Returns 'invalid' when Settings need fixing, 'reused' when the same settings ran within the validity window. */
+  run(d: DocState, notify: Notify): 'invalid' | 'reused' | 'started' {
+    d.clauses.forEach((c) => (c.touched = true));
+    if (this.errors(d)) { this.bump(); return 'invalid'; }
+    const t = this.tpl(d.tid), key = this.keyOf(d), snap = snapOf(d);
+    const last = this.runs[key];
+    if (last && last.snap === snap && last.until > new Date()) { this.toast(`Same settings as the run at ${last.at.toTimeString().slice(0, 5)}. Showing that result`); return 'reused'; }
+    const job: Job = { t0: Date.now(), name: d.name, snap }; this.jobs[key] = job;
+    const dur = t.heavy || this.forcedBackground(t, d) ? 14000 : 600;
+    const tick = setInterval(() => (this.jobs[key] === job ? this.bump() : clearInterval(tick)), 1000);
+    setTimeout(() => {
+      if (this.jobs[key] !== job) return;
+      clearInterval(tick);
+      const R = buildR(t, d);
+      const rows = rowsFor(R).filter((r) => evalAll(d.clauses, r));
+      if (d.kind === 'rep') { const rr = this.rep(d.id); if (rr) rr.lastRun = new Date(); }
+      this.runs[key] = { R, rows, snap, at: new Date(), until: new Date(Date.now() + t.expiry * 60000), ms: (Date.now() - job.t0) / 1000, sentence: docSentence(t, d, this.noun(t)).replace(/^Shows \S+ \S+ /, '') };
+      delete this.jobs[key];
+      const here = this.router.url.startsWith(`/report/${d.kind}/${d.id}`);
+      if (dur > 5000 || notify !== 'none' || !here) {
+        this.notes.unshift({ id: this.nid++, text: `${d.name} is ready`, key, at: new Date(), read: false, email: notify === 'email' });
+        this.toast(`${d.name} is ready${notify === 'email' ? '. A link was also emailed to you' : ''}`, here ? undefined : key);
+      }
+      this.bump();
+    }, dur);
+    this.bump();
+    return 'started';
+  }
+  cancel(d: DocState) { delete this.jobs[this.keyOf(d)]; this.toast('Run cancelled'); this.bump(); }
+
+  /** Save the working copy into the user's own report. */
+  save(d: DocState) {
+    const r = this.rep(d.id)!;
+    Object.assign(r, { period: clone(d.period), clauses: clone(d.clauses), hidden: [...d.hidden], sorts: clone(d.sorts), groups: [...d.groups], modified: new Date() });
+    d.saved = snapOf(d); this.bump();
+  }
+  /** Save the working copy as a new report of the user's own; the open report becomes that one. */
+  saveAs(d: DocState, name: string, folder: string | null = null): MyReport {
+    const r: MyReport = {
+      id: 'm' + this.repid++, tid: d.tid, name, period: clone(d.period), conds: [], clauses: clone(d.clauses), hidden: [...d.hidden], sorts: clone(d.sorts), groups: [...d.groups],
+      notify: 'none', openNow: true, owner: 'me', share: { mode: 'private', people: [] }, folder, modified: new Date(),
+    };
+    this.reps.push(r);
+    const oldKey = this.keyOf(d);
+    Object.assign(d, { kind: 'rep', id: r.id, name, owner: 'me' }); d.saved = snapOf(d);
+    this.docs[this.keyOf(d)] = d; delete this.docs[oldKey];
+    if (this.runs[oldKey]) { this.runs[this.keyOf(d)] = this.runs[oldKey]; delete this.runs[oldKey]; }
+    this.bump(); return r;
+  }
+  /** New report from a template or a copy of another report. */
+  createReport(o: { tid: string; name: string; period: MyReport['period']; from?: MyReport | null; folder: string | null }): MyReport {
+    const src = o.from;
+    const r: MyReport = {
+      id: 'm' + this.repid++, tid: o.tid, name: o.name, period: clone(o.period), conds: [], clauses: src ? clone(src.clauses || []) : [],
+      groups: src ? [...(src.groups || [])] : this.tpl(o.tid).groups.slice(0, 2), hidden: src ? [...src.hidden] : [], sorts: src ? clone(src.sorts) : [],
+      notify: 'none', openNow: true, owner: 'me', share: { mode: 'private', people: [] }, folder: o.folder, modified: new Date(),
+    };
     this.reps.push(r); this.bump(); return r;
   }
+  duplicate(r: MyReport) {
+    const c: MyReport = Object.assign(clone(r), { id: 'm' + this.repid++, name: r.name + ' (copy)', owner: 'me', share: { mode: 'private', people: [] }, lastRun: null, modified: new Date(), fav: false });
+    this.reps.push(c); this.bump(); return c;
+  }
   deleteRep(id: string) {
-    this.reps = this.reps.filter((r) => r.id !== id); this.scheds = this.scheds.filter((s) => s.src !== id); this.bump();
+    this.reps = this.reps.filter((r) => r.id !== id); this.scheds = this.scheds.filter((s) => s.src !== id);
+    delete this.docs['rep:' + id]; delete this.runs['rep:' + id]; this.bump();
   }
   addSchedule(s: Omit<Schedule, 'id'>) { this.scheds.push({ id: this.schid++, ...s }); this.bump(); }
+  addFolder(name: string) { const f = { id: 'f' + Date.now(), name }; this.folders.push(f); this.bump(); return f; }
+  periodText(r: MyReport) { return `${this.periodLabel(this.tpl(r.tid))}: ${rangeText(r.period, true)}`; }
 
   /* ---------- templates (IT) ---------- */
   newTemplateId() { return 't' + this.tid++; }
@@ -169,7 +192,7 @@ export class RbStore {
     return T_({ id: this.newTemplateId(), title: 'Untitled template', status: 'draft', module, entity, places: [module] });
   }
   saveTemplate(d: Template) {
-    const def = clone(d); def.edited = '06 Oct 2026';
+    const def = clone(d); def.edited = '12 Oct 2026';
     const i = this.templates.findIndex((t) => t.id === d.id);
     if (i >= 0) this.templates[i] = def; else this.templates.push(def);
     this.bump();

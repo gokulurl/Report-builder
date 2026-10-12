@@ -27,7 +27,7 @@
   <rb-pop [anchor]="el" (closed)="closeBell()">
     <div class="rb-mlab">Notifications</div>
     @for (n of s.notes.slice(0, 8); track n.id) {
-      <button class="rb-mi" (click)="openNote(n.res)"><mat-icon>{{ n.read ? 'check' : 'notifications_none' }}</mat-icon>
+      <button class="rb-mi" (click)="openNote(n.key)"><mat-icon>{{ n.read ? 'check' : 'notifications_none' }}</mat-icon>
         <span class="grow">{{ n.text }}@if (n.email) {<br /><span class="muted tiny">Also emailed as a link</span>}</span><span class="r">{{ hm(n.at) }}</span></button>
     } @empty { <div class="rb-mlab">No notifications</div> }
   </rb-pop>
