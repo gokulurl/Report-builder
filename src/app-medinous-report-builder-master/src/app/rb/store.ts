@@ -5,12 +5,12 @@ import { Doc, buildR, clauseErr, docSentence, evalAll, fromConds } from './staff
 import { rowsFor } from './engine';
 
 export type Role = 'admin' | 'user';
-export interface Schedule { id: number; src: string; freq: string; time: string; deliver: string[]; fmt: string; on: boolean }
+export interface Schedule { id: number; src: string; freq: string; time: string; deliver: string[]; fmt: string; on: boolean; last?: { at: Date; ok: boolean } }
 /** `key` is the report the note belongs to ("rep:m1" or "tpl:t3"); opening it shows that report's Results tab. */
 export interface Note { id: number; text: string; key: string; at: Date; read: boolean; email: boolean }
 export interface Folder { id: string; name: string }
 /** The open report's working copy. Saved reports keep their own values until Save. */
-export interface DocState extends Doc { kind: 'tpl' | 'rep'; id: string; tid: string; name: string; owner: string; saved: string }
+export interface DocState extends Doc { kind: 'tpl' | 'rep'; id: string; tid: string; name: string; owner: string; saved: string; savedW?: string }
 export interface Run { R: Spec; rows: Row[]; snap: string; at: Date; until: Date; ms: number; sentence: string }
 export interface Job { t0: number; name: string; snap: string }
 
@@ -18,7 +18,7 @@ const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o), (k, v) => (typeof v
 let fid = 100, ruid = 1;
 export const nextFilterId = () => fid++;
 export const nextRuleId = () => ruid++;
-export const snapOf = (d: Doc) => JSON.stringify({ period: d.period, clauses: d.clauses.map((c) => ({ field: c.field, vals: c.vals, exclude: c.exclude, from: c.from, to: c.to })), hidden: d.hidden, sorts: d.sorts, groups: d.groups });
+export const snapOf = (d: Doc) => JSON.stringify({ period: d.period, clauses: d.clauses.map((c) => ({ field: c.field, vals: c.vals, exclude: c.exclude, from: c.from, to: c.to })), hidden: d.hidden, sorts: d.sorts, groups: d.groups, order: d.order || null });
 
 const FX = (col: string, vals: string[]): Filter => ({ id: fid++, col, op: 'in', vals, fixed: true });
 const TBASE = (): Template => ({
@@ -61,7 +61,10 @@ export class RbStore {
     { id: 'm' + this.repid++, tid: 't5', name: 'Insurance invoices over KD 100', period: { preset: 'last90' }, conds: [{ id: fid++, col: 'scat', op: 'in', vals: ['Insurance'] }, { id: fid++, col: 'net', op: 'gt', a: '100' }], hidden: [], sorts: [{ col: 'net', dir: 'desc' }], notify: 'none', openNow: true, owner: 'Fatima Al Sabah', share: { mode: 'people', people: ['me'] }, fav: true },
   ];
   folders: Folder[] = [{ id: 'fd', name: 'Daily checks' }, { id: 'fm', name: 'Month end' }];
-  scheds: Schedule[] = [{ id: this.schid++, src: 'm1', freq: 'Working days (Sun to Thu)', time: '07:30', deliver: ['Dashboard', 'In-app notification'], fmt: 'Excel', on: true }];
+  scheds: Schedule[] = [
+    { id: this.schid++, src: 'm1', freq: 'Working days (Sun to Thu)', time: '07:30', deliver: ['Dashboard', 'In-app notification'], fmt: 'Excel', on: true, last: { at: new Date(2026, 9, 6, 7, 30), ok: true } },
+    { id: this.schid++, src: 'm3', freq: 'First day of the month', time: '06:00', deliver: ['Dashboard', 'Email link'], fmt: 'PDF', on: true, last: { at: new Date(2026, 9, 1, 6, 0), ok: false } },
+  ];
   notes: Note[] = [];
   /** Last finished run and any running job, per report key, so a run survives leaving the page. */
   runs: Record<string, Run> = {};
@@ -73,6 +76,7 @@ export class RbStore {
 
   constructor(private router: Router) {
     this.reps.forEach((r, i) => {
+      if (r.owner === 'me') r.share = { mode: r.share.people.length ? 'people' : 'private', people: r.share.people.filter((x) => x !== 'me') };
       r.clauses = fromConds(r.conds); r.groups = this.tpl(r.tid).groups.slice(0, 2); r.modified = new Date(2026, 9, 1 + i);
     });
   }
@@ -101,17 +105,18 @@ export class RbStore {
       let d: DocState;
       if (kind === 'rep') {
         const r = this.rep(id)!;
-        d = { kind, id, tid: r.tid, name: r.name, owner: r.owner, period: clone(r.period), clauses: clone(r.clauses || []), hidden: [...r.hidden], sorts: clone(r.sorts), groups: [...(r.groups || [])], saved: '' };
+        d = { kind, id, tid: r.tid, name: r.name, owner: r.owner, period: clone(r.period), clauses: clone(r.clauses || []), hidden: [...r.hidden], sorts: clone(r.sorts), groups: [...(r.groups || [])], order: r.order ? [...r.order] : null, widths: clone(r.widths || {}), saved: '' };
       } else {
         const t = this.tpl(id);
-        d = { kind, id, tid: id, name: t.title, owner: 'me', period: clone(this.ds(t).defaultPeriod), clauses: [], hidden: [], sorts: [], groups: t.groups.slice(0, 2), saved: '' };
+        d = { kind, id, tid: id, name: t.title, owner: 'me', period: clone(this.ds(t).defaultPeriod), clauses: [], hidden: [], sorts: [], groups: t.groups.slice(0, 2), order: null, widths: {}, saved: '' };
       }
-      d.saved = snapOf(d); this.docs[key] = d;
+      d.saved = snapOf(d); d.savedW = JSON.stringify(d.widths || {}); this.docs[key] = d;
     }
     return this.docs[key];
   }
   keyOf(d: DocState) { return d.kind + ':' + d.id; }
-  dirty(d: DocState) { return snapOf(d) !== d.saved; }
+  /** Unsaved when the settings differ from the saved ones; column widths count too (they are saved with the report). */
+  dirty(d: DocState) { return snapOf(d) !== d.saved || JSON.stringify(d.widths || {}) !== (d.savedW ?? '{}'); }
   errors(d: DocState) { return d.clauses.filter((c) => clauseErr(c)).length + (periodErr(d.period) ? 1 : 0); }
   forcedBackground(t: Template, d: Doc) { return periodDays(d.period) > this.ds(t).maxInteractiveDays; }
 
@@ -130,7 +135,7 @@ export class RbStore {
       clearInterval(tick);
       const R = buildR(t, d);
       const rows = rowsFor(R).filter((r) => evalAll(d.clauses, r));
-      if (d.kind === 'rep') { const rr = this.rep(d.id); if (rr) rr.lastRun = new Date(); }
+      if (d.kind === 'rep') { const rr = this.rep(d.id); if (rr) { rr.lastRun = new Date(); rr.lastLines = rows.length; } }
       this.runs[key] = { R, rows, snap, at: new Date(), until: new Date(Date.now() + t.expiry * 60000), ms: (Date.now() - job.t0) / 1000, sentence: docSentence(t, d, this.noun(t)).replace(/^Shows \S+ \S+ /, '') };
       delete this.jobs[key];
       const here = this.router.url.startsWith(`/report/${d.kind}/${d.id}`);
@@ -148,18 +153,18 @@ export class RbStore {
   /** Save the working copy into the user's own report. */
   save(d: DocState) {
     const r = this.rep(d.id)!;
-    Object.assign(r, { period: clone(d.period), clauses: clone(d.clauses), hidden: [...d.hidden], sorts: clone(d.sorts), groups: [...d.groups], modified: new Date() });
-    d.saved = snapOf(d); this.bump();
+    Object.assign(r, { period: clone(d.period), clauses: clone(d.clauses), hidden: [...d.hidden], sorts: clone(d.sorts), groups: [...d.groups], order: d.order ? [...d.order] : null, widths: clone(d.widths || {}), modified: new Date() });
+    d.saved = snapOf(d); d.savedW = JSON.stringify(d.widths || {}); this.bump();
   }
   /** Save the working copy as a new report of the user's own; the open report becomes that one. */
   saveAs(d: DocState, name: string, folder: string | null = null): MyReport {
     const r: MyReport = {
-      id: 'm' + this.repid++, tid: d.tid, name, period: clone(d.period), conds: [], clauses: clone(d.clauses), hidden: [...d.hidden], sorts: clone(d.sorts), groups: [...d.groups],
+      id: 'm' + this.repid++, tid: d.tid, name, period: clone(d.period), conds: [], clauses: clone(d.clauses), hidden: [...d.hidden], sorts: clone(d.sorts), groups: [...d.groups], order: d.order ? [...d.order] : null, widths: clone(d.widths || {}),
       notify: 'none', openNow: true, owner: 'me', share: { mode: 'private', people: [] }, folder, modified: new Date(),
     };
     this.reps.push(r);
     const oldKey = this.keyOf(d);
-    Object.assign(d, { kind: 'rep', id: r.id, name, owner: 'me' }); d.saved = snapOf(d);
+    Object.assign(d, { kind: 'rep', id: r.id, name, owner: 'me' }); d.saved = snapOf(d); d.savedW = JSON.stringify(d.widths || {});
     this.docs[this.keyOf(d)] = d; delete this.docs[oldKey];
     if (this.runs[oldKey]) { this.runs[this.keyOf(d)] = this.runs[oldKey]; delete this.runs[oldKey]; }
     this.bump(); return r;

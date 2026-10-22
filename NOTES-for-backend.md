@@ -116,3 +116,11 @@ The IT side (templates, builder) is unchanged. Code: `src/app/rb/list.ts`, `doc.
 - **Runs are per report.** The last run is kept, and re-running unchanged settings within the template's `expiry` reuses it. If settings change after a run, the result is flagged as out of date.
 - **Schedules** always run the saved settings. Scheduling is refused while there are unsaved changes, and only works on the person's own report.
 - **Folders** are per person. Favourites are per report.
+
+## 9. Colleague's update (22 Oct 2026)
+
+- **A report also stores** `order` (the staff column order, or null for the template's), `widths` (px per column) and `lastLines` (lines in the last run). Grouping now allows up to **3** levels.
+- **A schedule stores** `last: { at, ok }` so the list can show the last delivery and a failure. "Run it now" re-runs and re-delivers a failed schedule.
+- **Share and access** needs a people directory with name, email and role. Sharing is per person, not "everyone in the module".
+- **Download from the list** uses the report's saved values. Heavy templates are prepared in the background and notify when the file is ready.
+- **Custom dates** are entered as dd/mm/yyyy and sent as ISO dates.

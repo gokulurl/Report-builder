@@ -65,13 +65,20 @@ export function autoSums(t: Template): Record<string, SumFn> {
   return Object.assign(o, t.sums);
 }
 
-export interface Doc { period: Period; clauses: Clause[]; hidden: string[]; sorts: Sort[]; groups: string[] }
+export interface Doc { period: Period; clauses: Clause[]; hidden: string[]; sorts: Sort[]; groups: string[]; order?: string[] | null; widths?: Record<string, number> }
+
+/** The report's column order: the staff member's own, if it still matches the template, else the template's. */
+export function colOrder(t: Template, d: Doc) {
+  const o = d.order;
+  return o && o.length === t.cols.length && t.cols.every((c) => o.includes(c)) ? [...o] : [...t.cols];
+}
 
 /** Template + a staff report's settings → what runs. */
 export function buildR(t: Template, d: Doc): Spec {
   const R = effective(t, { period: d.period, conds: [], hidden: d.hidden, sorts: d.sorts });
   const g = d.groups || [];
   const same = JSON.stringify(g) === JSON.stringify(t.groups.slice(0, 2));
+  R.cols = colOrder(t, d).filter((c) => !d.hidden.includes(c));
   R.groups = [...g];
   R.sums = g.length ? autoSums(t) : t.sums;
   R.show = g.length ? (same ? t.show : { detail: true, sub: true, grand: true }) : { detail: true, sub: false, grand: true };
@@ -115,5 +122,11 @@ export function nextRun(freq: string, time: string, today: Date) {
   return d;
 }
 
-/** Topic headings for templates in the New report tree. */
+/** Short period for lists: "Last 30 days", or the dates for a custom range. */
+export function shortPeriod(p: Period, presets: Record<string, string>) {
+  if (p.preset === 'custom') { const r = resolveRange(p); return r && r.from && r.to ? `${fdate(r.from)} to ${fdate(r.to)}` : 'Custom dates'; }
+  return presets[p.preset] || p.preset;
+}
+
+/** Topic headings for templates in the template picker. */
 export const TOPICS: Record<string, string> = { t1: 'Revenue', t2: 'Revenue', t4: 'Revenue', t7: 'Revenue', t3: 'Pharmacy', t5: 'Invoices and follow-up', t6: 'Invoices and follow-up' };

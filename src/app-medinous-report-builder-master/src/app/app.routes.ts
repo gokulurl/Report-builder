@@ -7,7 +7,11 @@ import { Routes } from '@angular/router';
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'reports' },
   { path: 'reports', loadComponent: () => import('./rb/list').then((m) => m.RbList) },
-  { path: 'report/:kind/:id', loadComponent: () => import('./rb/doc').then((m) => m.RbDoc) },
+  {
+    path: 'report/:kind/:id', loadComponent: () => import('./rb/doc').then((m) => m.RbDoc),
+    // Leaving a report with unsaved changes asks Save / Don't save / Cancel
+    canDeactivate: [(c: { canLeave: () => boolean | Promise<boolean> }) => c.canLeave()],
+  },
   { path: 'it', loadComponent: () => import('./rb/templates').then((m) => m.RbTemplates) },
   { path: 'it/builder/:id', loadComponent: () => import('./rb/builder').then((m) => m.RbBuilder) },
   { path: 'run/:kind/:id', redirectTo: 'report/:kind/:id' },

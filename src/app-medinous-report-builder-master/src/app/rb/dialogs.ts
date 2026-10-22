@@ -1,37 +1,72 @@
-import { Component, computed, input, output } from '@angular/core';
+import { Component, computed, input, output, signal } from '@angular/core';
+import { MatIconModule } from '@angular/material/icon';
 import { FormsModule } from '@angular/forms';
 import { RbStore, Schedule } from './store';
-import { MyReport, PRESETS, Period, resolveRange } from './engine';
+import { MyReport, PRESETS, Period, fdate, resolveRange } from './engine';
 import { MORE, QUICK, iso } from './staff';
 import { RbDialog } from './ui';
 
-/** Period picker used everywhere staff choose dates: a preset list plus the dates it resolves to (editing a date makes it custom). */
+const dmy = (s?: string) => { if (!s) return ''; const [y, m, d] = s.split('-'); return `${d}/${m}/${y}`; };
+/** Accepts 7/9/2026, 07-09-2026 or 07.09.2026 (day first, as written in the GCC). */
+const parseDmy = (s: string) => {
+  const m = String(s).trim().match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/); if (!m) return null;
+  const d = new Date(+m[3], +m[2] - 1, +m[1]); return d.getMonth() === +m[2] - 1 ? iso(d) : null;
+};
+
+/**
+ * Period picker used everywhere staff choose dates. A preset shows the dates it covers as text;
+ * "Custom dates" shows day/month/year fields, each with a calendar button.
+ */
 @Component({
   selector: 'rb-period',
-  imports: [FormsModule],
+  imports: [FormsModule, MatIconModule],
   template: `
     <select class="rb-sel rb-psel" [ngModel]="value().preset" (ngModelChange)="pick($event)" aria-label="Period">
       @for (k of keys; track k) { <option [value]="k">{{ presets[k] }}</option> }
       <option value="custom">Custom dates</option>
     </select>
-    <span class="rb-pdr">
-      <input type="date" class="rb-inp" [ngModel]="from()" (ngModelChange)="dates($event, null)" aria-label="From date" />
-      <span class="muted">to</span>
-      <input type="date" class="rb-inp" [ngModel]="to()" (ngModelChange)="dates(null, $event)" aria-label="To date" />
-    </span>`,
+    @if (value().preset === 'custom') {
+      @for (k of ['a', 'b']; track k) {
+        @if (k === 'b') { <span class="muted">to</span> }
+        <span class="rb-dfield" [class.bad]="errKey() === k">
+          <input class="rb-inp rb-dtxt" [value]="txt(k)" (change)="typed(k, $any($event.target).value)" placeholder="dd/mm/yyyy" inputmode="numeric"
+                 [attr.aria-label]="(k === 'a' ? 'From' : 'To') + ' date, day month year'" [attr.aria-invalid]="errKey() === k" />
+          <button type="button" class="fx-icon-btn sm" (click)="cal(hid)" [attr.aria-label]="'Pick ' + (k === 'a' ? 'from' : 'to') + ' date'"><mat-icon>calendar_month</mat-icon></button>
+          <input #hid type="date" class="rb-dhid" [value]="k === 'a' ? from() : to()" (change)="setIso(k, $any($event.target).value)" tabindex="-1" aria-hidden="true" />
+        </span>
+      }
+      @if (err()) { <span class="rb-ferr inline" role="alert">{{ err() }}</span> }
+    } @else if (resolved()) {
+      <span class="muted tiny rb-presolved">{{ resolved() }}</span>
+    }`,
   host: { class: 'rb-period' },
 })
 export class RbPeriod {
   value = input.required<Period>();
   changed = output<Period>();
   presets = PRESETS; keys = [...QUICK, ...MORE];
+  err = signal(''); errKey = signal(''); private draft: Record<string, string> = {};
   private r = computed(() => resolveRange(this.value()));
   from = computed(() => (this.r()?.from ? iso(this.r()!.from!) : this.value().a || ''));
   to = computed(() => (this.r()?.to ? iso(this.r()!.to!) : this.value().b || ''));
+  resolved = computed(() => {
+    const r = this.r(); if (!r || !r.from || !r.to) return '';
+    const span = +r.from === +r.to ? fdate(r.from) : `${fdate(r.from)} to ${fdate(r.to)}`;
+    return span + (r.kind === 'roll' ? ', includes today' : r.kind === 'cal' ? ', to date' : '');
+  });
+  txt(k: string) { return this.draft[k] ?? dmy(k === 'a' ? this.from() : this.to()); }
   pick(k: string) {
+    this.err.set(''); this.errKey.set(''); this.draft = {};
     this.changed.emit(k === 'custom' ? { preset: 'custom', a: this.from() || iso(new Date()), b: this.to() || iso(new Date()) } : { preset: k });
   }
-  dates(a: string | null, b: string | null) { this.changed.emit({ preset: 'custom', a: a ?? this.from(), b: b ?? this.to() }); }
+  typed(k: string, v: string) {
+    const d = parseDmy(v);
+    if (v.trim() && !d) { this.draft[k] = v; this.errKey.set(k); this.err.set(`${k === 'a' ? 'From' : 'To'} date: enter it as day/month/year, for example 07/09/2026`); return; }
+    delete this.draft[k]; this.err.set(''); this.errKey.set('');
+    this.setIso(k, d || '');
+  }
+  setIso(k: string, v: string) { this.changed.emit({ preset: 'custom', a: k === 'a' ? v : this.from(), b: k === 'b' ? v : this.to() }); }
+  cal(el: HTMLInputElement) { try { el.showPicker(); } catch { el.click(); } }
 }
 
 /** Create or change a schedule. A schedule always runs a saved report with its saved settings. */

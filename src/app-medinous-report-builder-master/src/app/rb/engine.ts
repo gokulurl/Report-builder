@@ -41,6 +41,8 @@ export interface MyReport {
   notify: Notify; openNow: boolean; owner: string; share: Share;
   /** Staff model: the report's own filters, grouping, folder and list metadata. */
   clauses?: Clause[]; groups?: string[]; folder?: string | null; fav?: boolean; lastRun?: Date | null; modified?: Date;
+  /** Staff column order and widths (px), saved with the report; lines in the last run. */
+  order?: string[] | null; widths?: Record<string, number>; lastLines?: number;
 }
 /** A staff filter: chosen values (or everything except them) for text, a from–to range for amounts. No operators. */
 export interface Clause { id: number; field: string; vals: string[]; exclude: boolean; from: string; to: string; touched?: boolean }
@@ -116,6 +118,12 @@ export const DATASETS: Record<string, { periodCol: string; noun: string; default
   },
 };
 export const COLLEAGUES = ['Fatima Al Sabah', 'Rahul Nair', 'Noura Al Mutairi', 'Joseph Mathew', 'Aisha Khan'];
+/** People directory for sharing: name, email, role. */
+export const USERS: [string, string, string][] = [
+  ['Fatima Al Sabah', 'fatima.alsabah@qaclinic.kw', 'Billing supervisor'], ['Rahul Nair', 'rahul.nair@qaclinic.kw', 'Billing'],
+  ['Noura Al Mutairi', 'noura.m@qaclinic.kw', 'Finance'], ['Joseph Mathew', 'joseph.m@qaclinic.kw', 'Billing'],
+  ['Aisha Khan', 'aisha.khan@qaclinic.kw', 'Front desk'], ['Shiny Joseph', 'shiny.j@qaclinic.kw', 'IT'], ['Doney Mathew', 'doney.m@qaclinic.kw', 'IT'],
+];
 
 /* ---------- sample rows ---------- */
 export const TODAY = new Date(2026, 9, 6);
