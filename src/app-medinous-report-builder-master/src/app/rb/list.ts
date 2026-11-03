@@ -5,8 +5,8 @@ import { NgTemplateOutlet } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Folder, RbStore, Schedule } from './store';
-import { MyReport, PRESETS, fdate, hm, rangeText } from './engine';
-import { TOPICS, clauseErr, clauseText, nextRun, shortPeriod } from './staff';
+import { MyReport, PRESETS, Template, fdate, hm, rangeText } from './engine';
+import { TOPICS, clauseErr, clauseText, isLockSum, nextRun, shortPeriod } from './staff';
 import { RbDialog, RbPop } from './ui';
 import { ScheduleDialog } from './dialogs';
 import { ShareDialog } from './share-dialog';
@@ -125,6 +125,7 @@ type Pop =
                 </span>
                 <div class="rb-sub rb-meta2">
                   <span class="muted tiny">{{ s.tpl(r.tid).title }}</span>
+                  @if (isSum(r)) { <span class="rb-tag info"><mat-icon class="xs">table_rows</mat-icon> Summary report</span> }
                   @if (scheduled(r)) { <span class="rb-tag ok"><mat-icon class="xs">schedule</mat-icon> Scheduled</span> }
                   @if (r.owner !== 'me') { <span class="rb-tag vio"><mat-icon class="xs">person</mat-icon> Shared by {{ r.owner }}</span> }
                   @else if (r.share.people.length) { <span class="rb-tag run"><mat-icon class="xs">group</mat-icon> Shared with {{ r.share.people.length }}</span> }
@@ -139,6 +140,7 @@ type Pop =
               </td>
               <td class="rb-lact" (click)="$event.stopPropagation()">
                 <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="open(r, true)"><mat-icon>play_arrow</mat-icon>Run</button>
+                <button class="fx-btn fx-btn-secondary fx-btn-sm rb-vebtn" (click)="open(r)" [attr.aria-label]="'View or edit ' + r.name"><mat-icon>edit_note</mat-icon><span>View/Edit</span></button>
                 <button class="fx-icon-btn" (click)="pop.set({ kind: 'row', el: $any($event.currentTarget), r })" [attr.aria-label]="'More actions for ' + r.name" aria-haspopup="menu"><mat-icon>more_horiz</mat-icon></button>
               </td>
             </tr>
@@ -154,10 +156,11 @@ type Pop =
           @for (t of list; track t.id) {
             <tr class="rb-lrow rb-rowlink" tabindex="0" (click)="openTpl(t.id)" (keydown.enter)="openTpl(t.id)" [attr.aria-label]="'Open ' + t.title">
               <td><span class="rb-ltitle">{{ t.title }}</span>
-                <div class="rb-sub rb-meta2 flush"><span class="muted tiny">{{ topic(t.id) }}</span>@if (t.heavy) { <span class="rb-tag mute">Often runs in background</span> }</div></td>
+                <div class="rb-sub rb-meta2 flush"><span class="muted tiny">{{ topic(t.id) }}</span>@if (lockSum(t)) { <span class="rb-tag info">Totals only</span> }@if (t.heavy) { <span class="rb-tag mute">Often runs in background</span> }</div></td>
               <td class="muted tiny"><span class="rb-clamp">{{ t.desc }}</span></td>
               <td class="rb-lact" (click)="$event.stopPropagation()">
                 <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="openTpl(t.id, true)"><mat-icon>play_arrow</mat-icon>Run</button>
+                <button class="fx-btn fx-btn-secondary fx-btn-sm rb-vebtn" (click)="openTpl(t.id)" [attr.aria-label]="'View or edit ' + t.title"><mat-icon>edit_note</mat-icon><span>View/Edit</span></button>
               </td>
             </tr>
           }
@@ -183,7 +186,6 @@ type Pop =
           @case ('row') {
             @if (p.kind === 'row') {
               @let r = p.r; @let own = r.owner === 'me';
-              <button class="rb-mi" (click)="pop.set(null); open(r)"><mat-icon>edit_note</mat-icon>View and edit</button>
               <div class="rb-mlab">Download with its saved values</div>
               @for (f of downloads; track f[0]) { <button class="rb-mi" (click)="download(r, f[0])"><mat-icon>{{ f[1] }}</mat-icon>{{ f[2] }}</button> }
               <div class="rb-msep"></div>
@@ -303,7 +305,7 @@ export class RbList {
   empty = computed<[string, string]>(() => ({
     fav: ['No favourites yet', 'Click the star next to any report.'] as [string, string],
     shared: ['Nothing shared with you yet', 'When colleagues share a report with you, it appears here.'] as [string, string],
-    all: ['No reports yet', 'Use New report, or run one of your Assigned reports.'] as [string, string],
+    all: ['No reports yet', 'Use New report to start one from an assigned report.'] as [string, string],
   } as Record<string, [string, string]>)[this.view()] || ['This folder is empty', 'Use the ⋯ menu on a report to move it here.']);
   found = computed(() => { this.s.rev(); const q = this.q().toLowerCase(); return this.s.reps.filter((r) => (r.name + ' ' + this.s.tpl(r.tid).title).toLowerCase().includes(q)); });
   foundTpl = computed(() => { const q = this.q().toLowerCase(); return this.s.library().filter((t) => (t.title + ' ' + t.desc).toLowerCase().includes(q)); });
@@ -314,6 +316,8 @@ export class RbList {
   next(sc: Schedule) { return `${fdate(nextRun(sc.freq, sc.time, this.s.today))} ${sc.time}`; }
   nextOf(r: MyReport) { const sc = this.s.scheds.find((x) => x.src === r.id && x.on); return sc ? this.next(sc) : ''; }
   topic(id: string) { return TOPICS[id] || 'Other'; }
+  lockSum(t: Template) { return isLockSum(t); }
+  isSum(r: MyReport) { return r.view === 'summary' || isLockSum(this.s.tpl(r.tid)); }
   /** "Last 30 days · Sponsor: Warba · Net Amount at least KD 100" */
   periodLine(r: MyReport) {
     const cl = (r.clauses || []).filter((c) => !clauseErr(c)).map((c) => clauseText(c).replace(/ is /, ': '));

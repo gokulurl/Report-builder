@@ -18,7 +18,7 @@ const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o), (k, v) => (typeof v
 let fid = 100, ruid = 1;
 export const nextFilterId = () => fid++;
 export const nextRuleId = () => ruid++;
-export const snapOf = (d: Doc) => JSON.stringify({ period: d.period, clauses: d.clauses.map((c) => ({ field: c.field, vals: c.vals, exclude: c.exclude, from: c.from, to: c.to })), hidden: d.hidden, sorts: d.sorts, groups: d.groups, order: d.order || null });
+export const snapOf = (d: Doc) => JSON.stringify({ period: d.period, clauses: d.clauses.map((c) => ({ field: c.field, vals: c.vals, exclude: c.exclude, from: c.from, to: c.to })), hidden: d.hidden, sorts: d.sorts, groups: d.groups, order: d.order || null, view: d.view || 'detail', mhidden: d.mhidden || [] });
 
 const FX = (col: string, vals: string[]): Filter => ({ id: fid++, col, op: 'in', vals, fixed: true });
 const TBASE = (): Template => ({
@@ -75,9 +75,10 @@ export class RbStore {
   lastTemplate = '';
 
   constructor(private router: Router) {
+    this.reps.push({ id: 'm' + this.repid++, tid: 't7', name: 'Daily revenue, this month', view: 'summary', groups: ['dday'], period: { preset: 'thismonth' }, conds: [], hidden: [], sorts: [], notify: 'none', openNow: true, owner: 'me', share: { mode: 'private', people: [] }, folder: 'fd' });
     this.reps.forEach((r, i) => {
       if (r.owner === 'me') r.share = { mode: r.share.people.length ? 'people' : 'private', people: r.share.people.filter((x) => x !== 'me') };
-      r.clauses = fromConds(r.conds); r.groups = this.tpl(r.tid).groups.slice(0, 2); r.modified = new Date(2026, 9, 1 + i);
+      r.clauses = fromConds(r.conds); r.groups = r.groups || this.tpl(r.tid).groups.slice(0, 2); r.modified = new Date(2026, 9, 1 + i);
     });
   }
 
@@ -105,10 +106,10 @@ export class RbStore {
       let d: DocState;
       if (kind === 'rep') {
         const r = this.rep(id)!;
-        d = { kind, id, tid: r.tid, name: r.name, owner: r.owner, period: clone(r.period), clauses: clone(r.clauses || []), hidden: [...r.hidden], sorts: clone(r.sorts), groups: [...(r.groups || [])], order: r.order ? [...r.order] : null, widths: clone(r.widths || {}), saved: '' };
+        d = { kind, id, tid: r.tid, name: r.name, owner: r.owner, period: clone(r.period), clauses: clone(r.clauses || []), hidden: [...r.hidden], sorts: clone(r.sorts), groups: [...(r.groups || [])], order: r.order ? [...r.order] : null, widths: clone(r.widths || {}), view: r.view || 'detail', mhidden: [...(r.mhidden || [])], saved: '' };
       } else {
         const t = this.tpl(id);
-        d = { kind, id, tid: id, name: t.title, owner: 'me', period: clone(this.ds(t).defaultPeriod), clauses: [], hidden: [], sorts: [], groups: t.groups.slice(0, 2), order: null, widths: {}, saved: '' };
+        d = { kind, id, tid: id, name: t.title, owner: 'me', period: clone(this.ds(t).defaultPeriod), clauses: [], hidden: [], sorts: [], groups: t.groups.slice(0, 2), order: null, widths: {}, view: 'detail', mhidden: [], saved: '' };
       }
       d.saved = snapOf(d); d.savedW = JSON.stringify(d.widths || {}); this.docs[key] = d;
     }
@@ -153,13 +154,13 @@ export class RbStore {
   /** Save the working copy into the user's own report. */
   save(d: DocState) {
     const r = this.rep(d.id)!;
-    Object.assign(r, { period: clone(d.period), clauses: clone(d.clauses), hidden: [...d.hidden], sorts: clone(d.sorts), groups: [...d.groups], order: d.order ? [...d.order] : null, widths: clone(d.widths || {}), modified: new Date() });
+    Object.assign(r, { period: clone(d.period), clauses: clone(d.clauses), hidden: [...d.hidden], sorts: clone(d.sorts), groups: [...d.groups], order: d.order ? [...d.order] : null, widths: clone(d.widths || {}), view: d.view || 'detail', mhidden: [...(d.mhidden || [])], modified: new Date() });
     d.saved = snapOf(d); d.savedW = JSON.stringify(d.widths || {}); this.bump();
   }
   /** Save the working copy as a new report of the user's own; the open report becomes that one. */
   saveAs(d: DocState, name: string, folder: string | null = null): MyReport {
     const r: MyReport = {
-      id: 'm' + this.repid++, tid: d.tid, name, period: clone(d.period), conds: [], clauses: clone(d.clauses), hidden: [...d.hidden], sorts: clone(d.sorts), groups: [...d.groups], order: d.order ? [...d.order] : null, widths: clone(d.widths || {}),
+      id: 'm' + this.repid++, tid: d.tid, name, period: clone(d.period), conds: [], clauses: clone(d.clauses), hidden: [...d.hidden], sorts: clone(d.sorts), groups: [...d.groups], order: d.order ? [...d.order] : null, widths: clone(d.widths || {}), view: d.view || 'detail', mhidden: [...(d.mhidden || [])],
       notify: 'none', openNow: true, owner: 'me', share: { mode: 'private', people: [] }, folder, modified: new Date(),
     };
     this.reps.push(r);

@@ -282,3 +282,36 @@ table.rb-pvt th.n .rb-pvsort { flex-direction: row-reverse; }
 .rb-lmain table.rb-lt col.c-sruns { width: 26%; }
 .rb-lmain table.rb-lt col.c-del { width: 20%; }
 @media (max-width: 1200px) { .rb-lmain table.rb-lt col.c-del { width: 26%; } .rb-lmain table.rb-lt col.c-stitle { width: 34%; } }
+
+/* ---- Round 10: Summary report, View/Edit ---- */
+.rb-tag.info { background: #e8f1fc; color: #00448a; }
+.rb-lmain table.rb-lt col.c-act2 { width: 236px; }
+.rb-showas mat-icon { font-size: 16px; width: 16px; height: 16px; }
+.rb-locked { display: inline-flex; align-items: center; gap: 4px; }
+.rb-pvnote { margin: 8px 0 0; }
+@media (max-width: 1200px) {
+  .rb-lmain table.rb-lt col.c-act2 { width: 168px; }
+  .rb-vebtn { padding: 0 6px; span { display: none; } }
+}
+
+/* ---- Round 10: IT builder ---- */
+.rb-bfmt { white-space: nowrap; margin-right: 4px; }
+.rb-warnbox { margin: 0 0 8px; font-size: 12.5px; }
+.rb-hlf { display: grid; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 4px; background: #fafbfd; margin-top: 6px; }
+.rb-hlrow { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; .rb-flab { margin: 0; } .grow { flex: 1 1 140px; min-width: 0; } .rb-sel, .rb-inp { width: 100%; } }
+.rb-hlop { flex: 0 0 120px; }
+.rb-sepf { flex: 0 0 90px; }
+.rb-hlend { justify-content: space-between; }
+.rb-hlsw { display: flex; flex-wrap: wrap; gap: 6px; }
+.rb-hlsw-b { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 4px; background: #fff; padding: 4px 8px 4px 4px; font: inherit; font-size: 12px; color: var(--ink2); cursor: pointer;
+  &:hover { border-color: #b9d4f1; } &.on { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); color: var(--ink); } }
+.rb-hlsw-p { display: inline-grid; place-items: center; min-width: 40px; height: 22px; border-radius: 3px; border: 1px solid #e3e7ec; font-weight: 600; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.rb-lockp { display: flex; align-items: center; gap: 4px; margin: 0; }
+
+a.fx-btn, a.fx-btn:hover { text-decoration: none; }
+
+/* the last column's resize handle stays inside the grid, so no stray horizontal scrollbar */
+.rb-t th:last-child .rb-rz { right: 0; width: 5px; }
+
+/* six builder tabs fit the side panel without Settings being cut off */
+.rb-tabs .rb-tab { padding: 0 7px; }

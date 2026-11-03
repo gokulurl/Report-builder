@@ -62,7 +62,7 @@ export class PublishDialog {
               @if (t.removed) {
                 <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="t.removed = false; s.bump()"><mat-icon>restore</mat-icon>Restore</button>
               } @else {
-                <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="router.navigate(['/report', 'tpl', t.id])"><mat-icon>visibility</mat-icon>Open as staff</button>
+                <a class="fx-btn fx-btn-secondary fx-btn-sm" href="/reports?view=tpl" target="_blank" rel="noopener" matTooltip="Opens the staff Dashboard in a new tab, to check how staff see it"><mat-icon>visibility</mat-icon>See in Dashboard</a>
                 <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="router.navigate(['/it/builder', t.id])"><mat-icon>edit</mat-icon>Edit</button>
                 <button class="fx-icon-btn" (click)="menu.set({ t, el: $any($event.currentTarget) })" aria-label="More actions" aria-haspopup="menu"><mat-icon>more_horiz</mat-icon></button>
               }
@@ -74,25 +74,32 @@ export class PublishDialog {
 
     @if (menu(); as m) {
       <rb-pop [anchor]="m.el" (closed)="menu.set(null)">
-        <button class="rb-mi" (click)="publishing.set(m.t); menu.set(null)"><mat-icon>ios_share</mat-icon>Change where it appears</button>
-        <button class="rb-mi" (click)="m.t.removed = true; menu.set(null); s.bump(); s.toast(m.t.title + ' removed. Show removed to restore it')"><mat-icon>delete_outline</mat-icon>Remove template</button>
+        <button class="rb-mi" (click)="publishing.set(m.t); menu.set(null)"><mat-icon>ios_share</mat-icon>Place in modules</button>
+        <button class="rb-mi" (click)="removing.set(m.t); menu.set(null)"><mat-icon>delete_outline</mat-icon>Remove</button>
       </rb-pop>
+    }
+    @if (removing(); as t) {
+      <rb-dialog [title]="'Remove ' + t.title + '?'" (closed)="removing.set(null)">
+        <p class="muted tiny">Staff can no longer start reports from it.@if (deps(t); as n) { {{ n.reps }} saved {{ n.reps === 1 ? 'report uses' : 'reports use' }} it@if (n.scheds) { and {{ n.scheds }} {{ n.scheds === 1 ? 'schedule stops' : 'schedules stop' }}}. }You can restore it from Show removed.</p>
+        <ng-container foot><button class="fx-btn fx-btn-secondary" (click)="removing.set(null)">Cancel</button>
+          <button class="fx-btn fx-btn-primary danger" (click)="remove(t)">Remove</button></ng-container>
+      </rb-dialog>
     }
     @if (publishing(); as t) {
       <rb-publish [tpl]="t" (closed)="publishing.set(null)" (done)="published(t, $event)" />
     }
     @if (newOpen()) {
       <rb-dialog title="New template" (closed)="newOpen.set(false)">
-        <p class="muted tiny">Choose where the data comes from.</p>
+        <p class="muted tiny">Choose the module and the entity the report is built on.</p>
         <label class="rb-flab">Module
           <select class="rb-sel full" [value]="mod()" (change)="mod.set($any($event.target).value); ent.set(firstEntity())">
             @for (m of modules; track m) { <option>{{ m }}</option> }
           </select></label>
-        <div class="rb-flab">Data set</div>
+        <div class="rb-flab">Entity</div>
         @for (e of entities(); track e.id) {
           <label class="rb-mrow" [class.off]="!e.sample">
             <input type="radio" name="ent" [checked]="ent() === e.id" [disabled]="!e.sample" (change)="ent.set(e.id)" />
-            <div><b>{{ e.name }}</b><div class="muted tiny">{{ e.row }}@if (!e.sample) {. Sample data not available in this prototype}</div></div>
+            <div><b>{{ e.name }}</b><div class="muted tiny">{{ e.row }}@if (!e.sample) {. Not available in this prototype}</div></div>
           </label>
         }
         <ng-container foot>
@@ -106,6 +113,9 @@ export class RbTemplates {
   showRemoved = signal(false);
   menu = signal<{ t: Template; el: HTMLElement } | null>(null);
   publishing = signal<Template | null>(null);
+  removing = signal<Template | null>(null);
+  deps(t: Template) { const reps = this.s.reps.filter((r) => r.tid === t.id); return reps.length ? { reps: reps.length, scheds: this.s.scheds.filter((x) => reps.some((r) => r.id === x.src)).length } : null; }
+  remove(t: Template) { t.removed = true; this.removing.set(null); this.s.bump(); this.s.toast(t.title + ' removed. Tick Show removed to restore it'); }
   newOpen = signal(false);
   modules = MODULES;
   mod = signal('Billing');
@@ -124,7 +134,8 @@ export class RbTemplates {
     this.router.navigate(['/it/builder', 'new'], { state: { draft: t } });
   }
   published(t: Template, places: string[]) {
+    const wasPub = t.status === 'published';
     t.places = places; t.status = 'published'; this.publishing.set(null); this.s.bump();
-    this.s.toast('Published to ' + places.join(', ').replace(/, ([^,]*)$/, ' and $1'));
+    this.s.toast((wasPub ? 'Placed in ' : 'Published to ') + places.join(', ').replace(/, ([^,]*)$/, ' and $1'));
   }
 }

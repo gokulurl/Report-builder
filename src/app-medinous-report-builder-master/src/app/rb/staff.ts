@@ -2,7 +2,7 @@
  * Staff model (colleague's prototype, Oct 2026): a staff member's own reports with simplified filters
  * (pick values, or a from–to range; no operators), staff-chosen grouping (≤2 levels) and a plain-language summary.
  */
-import { CAT, Clause, Filter, Period, Row, Sort, Spec, SumFn, Template, colOf, effective, fdate, isNum, resolveRange, rowsFor } from './engine';
+import { CAT, Clause, Filter, Period, Row, SUMLBL, Sort, Spec, SumFn, Template, colOf, effective, fdate, isNum, resolveRange, rowsFor } from './engine';
 
 export const QUICK = ['today', 'yesterday', 'last7', 'last30', 'thismonth', 'lastmonth', 'thisyear'];
 export const MORE = ['last90', 'last365', 'thisquarter', 'lastquarter'];
@@ -59,13 +59,49 @@ export function autoSums(t: Template): Record<string, SumFn> {
   const o: Record<string, SumFn> = {};
   t.cols.forEach((c) => {
     const col = colOf(c, t.calcs);
-    if (col.type === 'money' || col.type === 'int') o[c] = col.sum.includes('sum') ? 'sum' : col.sum[0] || 'avg';
+    if ((col.type === 'money' || col.type === 'int') && col.sum.length) o[c] = col.sum.includes('sum') ? 'sum' : col.sum[0];
     if (c === 'inv') o[c] = 'countd';
   });
   return Object.assign(o, t.sums);
 }
 
-export interface Doc { period: Period; clauses: Clause[]; hidden: string[]; sorts: Sort[]; groups: string[]; order?: string[] | null; widths?: Record<string, number> }
+export interface Doc {
+  period: Period; clauses: Clause[]; hidden: string[]; sorts: Sort[]; groups: string[]; order?: string[] | null; widths?: Record<string, number>;
+  /** Show as: every line with group totals, or one row per group (RB-B6). */
+  view?: 'detail' | 'summary';
+  /** Figures the person unticked in a Summary report. */
+  mhidden?: string[];
+}
+
+/* ---------- Detailed vs Summary report (RB-B6) ---------- */
+/** IT turned on "Totals only": staff never see lines, so the report is always a summary. */
+export const isLockSum = (t: Template) => t.show.detail === false;
+export const isSummary = (t: Template, d: Doc) => isLockSum(t) || d.view === 'summary';
+/** The figures a summary can show: IT's own totals when locked, else each amount's natural total and the invoice count. */
+export const measMap = (t: Template): Record<string, SumFn> => (isLockSum(t) ? t.sums : autoSums(t));
+/** A summary always has a grouping: the report's, else the template's, else by day. */
+export function sumGroups(t: Template, d: Doc) {
+  const g = (d.groups.length ? d.groups : t.groups).slice(0, 3);
+  return g.length ? g : ['dday'];
+}
+export function sumMeasures(t: Template, d: Doc) {
+  const all = Object.keys(measMap(t)); const m = all.filter((k) => !(d.mhidden || []).includes(k));
+  return m.length ? m : all.slice(0, 1);
+}
+/** "Number of invoices", "Total of Net Amount" */
+export function measLabel(t: Template, k: string) {
+  const fn = measMap(t)[k];
+  return fn === 'countd' && k === 'inv' ? 'Number of invoices' : `${SUMLBL[fn]} of ${colOf(k, t.calcs).label}`;
+}
+function buildSumR(t: Template, d: Doc): Spec {
+  const R = effective(t, { period: d.period, conds: [], hidden: [], sorts: [] });
+  const g = sumGroups(t, d), ms = sumMeasures(t, d);
+  R.groups = [...g]; R.sums = Object.fromEntries(ms.map((k) => [k, measMap(t)[k]]));
+  R.cols = [...g, ...ms]; R.show = { detail: false, sub: true, grand: true }; R.start = 'expanded';
+  R.sorts = d.sorts.length ? d.sorts : [{ col: g[0], dir: 'asc' }];
+  R.display = { ...t.display, label: g[0] };
+  return R;
+}
 
 /** The report's column order: the staff member's own, if it still matches the template, else the template's. */
 export function colOrder(t: Template, d: Doc) {
@@ -75,6 +111,7 @@ export function colOrder(t: Template, d: Doc) {
 
 /** Template + a staff report's settings → what runs. */
 export function buildR(t: Template, d: Doc): Spec {
+  if (isSummary(t, d)) return buildSumR(t, d);
   const R = effective(t, { period: d.period, conds: [], hidden: d.hidden, sorts: d.sorts });
   const g = d.groups || [];
   const same = JSON.stringify(g) === JSON.stringify(t.groups.slice(0, 2));
@@ -94,9 +131,14 @@ export function docSentence(t: Template, d: Doc, noun: string) {
   const r = resolveRange(d.period);
   const per = r && r.from && r.to ? (+r.from === +r.to ? `on ${fdate(r.from)}` : `from ${fdate(r.from)} to ${fdate(r.to)}`) : '(choose a period)';
   const parts = d.clauses.filter((c) => !clauseErr(c)).map(clauseText);
-  let s = `Shows ${noun} dated ${per}`;
+  let s: string;
+  if (isSummary(t, d)) {
+    const per1 = (g: string) => { const c = colOf(g); return c.bucket ? `${c.bucket} (${c.label.replace(/ \(by \w+\)/, '')})` : c.label; };
+    const figs = sumMeasures(t, d).map((k) => (measMap(t)[k] === 'countd' && k === 'inv' ? 'the number of invoices' : measLabel(t, k).toLowerCase()));
+    s = `One row per ${sumGroups(t, d).map(per1).join(', then per ')}, showing ${figs.join(' and ')}, for ${noun} dated ${per}`;
+  } else s = `Shows ${noun} dated ${per}`;
   if (parts.length) s += `, where ${parts.join(', and ')}`;
-  if (d.groups.length) s += `, grouped by ${d.groups.map((x) => colOf(x).label).join(', then by ')}`;
+  if (!isSummary(t, d) && d.groups.length) s += `, grouped by ${d.groups.map((x) => colOf(x).label).join(', then by ')}`;
   if (t.scope.length) s += `. Always limited to ${t.scope.map((f) => colOf(f.col).label + ' ' + (f.vals || []).join(', ')).join('; ')}`;
   return s + '.';
 }

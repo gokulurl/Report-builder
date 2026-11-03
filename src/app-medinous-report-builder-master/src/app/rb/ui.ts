@@ -170,6 +170,8 @@ export class RbTable {
   sort = input<{ col: string; dir: string }[]>([]);
   widths = input<Record<string, number>>({});
   wrap = input<string[]>([]);
+  /** Header text overrides, e.g. "Number of invoices" in a summary. */
+  labels = input<Record<string, string>>({});
   density = input<'' | 'compact'>('');
   find = input('');
   selected = input<Set<number> | null>(null);
@@ -192,7 +194,7 @@ export class RbTable {
 
   private calcs(): CalcCol[] { return this.spec().calcs; }
   col(id: string) { return colOf(id, this.calcs()); }
-  label(id: string) { return this.col(id).label; }
+  label(id: string) { return this.labels()[id] || this.col(id).label; }
   num(id: string) { return isNum(this.col(id)); }
   restricted(id: string) { return !!this.col(id).restricted; }
   sortMark(id: string) {

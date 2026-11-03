@@ -10,11 +10,15 @@ export type SumFn = 'sum' | 'avg' | 'min' | 'max' | 'count' | 'countd';
 export interface Col {
   id: string; label: string; type: ColType; desc?: string; sum: SumFn[];
   grp?: boolean; restricted?: boolean; rel?: boolean;
+  /** A date shown and grouped by day, week (starting Sunday) or month. */
+  bucket?: 'day' | 'week' | 'month';
 }
 export interface CalcCol extends Col {
   type: 'calc'; op: CalcOp; a: Operand; b: Operand; kfmt: 'num' | 'money' | 'pct'; dp: number;
+  /** Separator for a joined text column. */
+  sep?: string;
 }
-export type CalcOp = 'add' | 'sub' | 'mul' | 'div' | 'pct';
+export type CalcOp = 'add' | 'sub' | 'mul' | 'div' | 'pct' | 'join';
 export interface Operand { kind: 'col' | 'num'; v: string }
 
 export interface Filter {
@@ -22,7 +26,7 @@ export interface Filter {
 }
 export interface Period { preset: string; a?: string; b?: string }
 export interface Sort { col: string; dir: 'asc' | 'desc' }
-export interface Rule { id: number; col: string; op: 'gt' | 'lt' | 'eq' | 'between' | 'contains'; a: string; b?: string; sw: string; applies: 'detail' | 'summary' | 'both' }
+export interface Rule { id: number; col: string; op: 'gt' | 'lt' | 'eq' | 'between' | 'contains' | 'is' | 'isnot' | 'before' | 'after'; a: string; b?: string; sw: string; applies: 'detail' | 'summary' | 'both' }
 export interface SummaryTab { id: string; name: string; groups: string[]; sums: Record<string, SumFn> }
 export interface Display { mode: 'table' | 'chart' | 'both'; type: 'bar' | 'line' | 'pie' | 'doughnut'; label: string; values: string[]; orient: 'portrait' | 'landscape' }
 
@@ -43,6 +47,8 @@ export interface MyReport {
   clauses?: Clause[]; groups?: string[]; folder?: string | null; fav?: boolean; lastRun?: Date | null; modified?: Date;
   /** Staff column order and widths (px), saved with the report; lines in the last run. */
   order?: string[] | null; widths?: Record<string, number>; lastLines?: number;
+  /** Show as (RB-B6) and the figures unticked in a summary. */
+  view?: 'detail' | 'summary'; mhidden?: string[];
 }
 /** A staff filter: chosen values (or everything except them) for text, a from–to range for amounts. No operators. */
 export interface Clause { id: number; field: string; vals: string[]; exclude: boolean; from: string; to: string; touched?: boolean }
@@ -79,10 +85,13 @@ export const CAT: Col[] = [
   { id: 'net', label: 'Net Amount', type: 'money', desc: 'Line value after discount', sum: MONEY },
   { id: 'ppart', label: 'Patient Part', type: 'money', desc: 'Share paid by the patient', sum: ['sum', 'avg'] },
   { id: 'cpart', label: 'Company Part', type: 'money', desc: 'Share paid by the sponsor', sum: ['sum', 'avg'] },
+  { id: 'dday', label: 'Invoice Date (by day)', type: 'date', desc: 'Invoice date, one group per day', sum: [], grp: true, bucket: 'day' },
+  { id: 'dweek', label: 'Invoice Date (by week)', type: 'date', desc: 'Invoice date, one group per week starting Sunday', sum: [], grp: true, bucket: 'week' },
+  { id: 'dmonth', label: 'Invoice Date (by month)', type: 'date', desc: 'Invoice date, one group per month', sum: [], grp: true, bucket: 'month' },
 ];
 export const SUMLBL: Record<SumFn, string> = { sum: 'Total', avg: 'Average', min: 'Minimum', max: 'Maximum', count: 'Count', countd: 'Count distinct' };
-export const OPS: Record<CalcOp, string> = { add: '+', sub: '−', mul: '×', div: '÷', pct: 'as % of' };
-export const OPNAME: Record<CalcOp, string> = { add: 'Add', sub: 'Subtract', mul: 'Multiply', div: 'Divide', pct: 'Percent of' };
+export const OPS: Record<CalcOp, string> = { add: '+', sub: '−', mul: '×', div: '÷', pct: 'as % of', join: 'joined with' };
+export const OPNAME: Record<Exclude<CalcOp, 'join'>, string> = { add: 'Add', sub: 'Subtract', mul: 'Multiply', div: 'Divide', pct: 'Percent of' };
 export const PRESETS: Record<string, string> = {
   any: 'Any time', today: 'Today', yesterday: 'Yesterday', last7: 'Last 7 days', last30: 'Last 30 days', last90: 'Last 90 days', last365: 'Last 365 days',
   thismonth: 'This month', lastmonth: 'Last month', thisquarter: 'This quarter', lastquarter: 'Last quarter', thisyear: 'This year',
@@ -93,7 +102,7 @@ export const PERIOD_GROUPS: [string, string[]][] = [
   ['Calendar periods', ['lastmonth', 'thismonth', 'lastquarter', 'thisquarter', 'thisyear']],
 ];
 export const NFMT: Record<string, string> = { auto: 'As registered', whole: 'Whole number (1,234)', d2: '2 decimals (1,234.56)', d3: '3 decimals (1,234.567)', money: 'Currency (KD 1,234.500)', money0: 'Currency, no decimals (KD 1,235)', pct: 'Percent (56%)' };
-export const DFMT: Record<string, string> = { medium: 'Medium (06 Oct 2026)', short: 'Short (06/10/2026)', long: 'Long (6 October 2026)', iso: 'ISO (2026-10-06)' };
+export const DFMT: Record<string, string> = { medium: '06 Oct 2026', wday: 'Tue, 06 Oct 2026', long: '6 October 2026', iso: '2026-10-06 (for systems)' };
 export const MODULES = ['Billing', 'Registration', 'Administration'];
 export const ENTITIES: Record<string, { id: string; name: string; row: string; sample: boolean }[]> = {
   Billing: [{ id: 'inv_detail', name: 'Invoice Detail', row: 'One row is a billed service line', sample: true }, { id: 'inv_header', name: 'Invoice Header', row: 'One row is an invoice', sample: false }],
@@ -149,15 +158,28 @@ for (let i = 0; i < 70; i++) {
   }
 }
 
+ROWS.forEach((r) => {
+  const d: Date = r['date'];
+  r['dday'] = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  r['dweek'] = new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay());
+  r['dmonth'] = new Date(d.getFullYear(), d.getMonth(), 1);
+});
+
 /* ---------- formatting ---------- */
 export const colOf = (id: string, calcs?: CalcCol[]): Col => (CAT.find((c) => c.id === id) || (calcs || []).find((c) => c.id === id))!;
-export const isNum = (c?: Col) => !!c && (c.type === 'money' || c.type === 'int' || c.type === 'calc');
+/** Joined text columns are formula columns but text: they group and filter, they never total. */
+export const isNum = (c?: Col) => !!c && (c.type === 'money' || c.type === 'int' || (c.type === 'calc' && (c as CalcCol).op !== 'join'));
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const p2 = (n: number) => String(n).padStart(2, '0');
+const WDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/** Default display of a bucketed date: "Week of 04 Oct 2026", "Oct 2026". */
+export const bucketFmt = (c?: Col) => (c?.bucket === 'month' ? 'month' : c?.bucket === 'week' ? 'week' : 'medium');
 export function fdate(d: Date | null | undefined, f = 'medium') {
   if (!d) return '';
-  if (f === 'short') return `${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()}`;
+  if (f === 'month') return `${MON[d.getMonth()]} ${d.getFullYear()}`;
+  if (f === 'week') return `Week of ${p2(d.getDate())} ${MON[d.getMonth()]} ${d.getFullYear()}`;
+  if (f === 'wday') return `${WDAY[d.getDay()]}, ${p2(d.getDate())} ${MON[d.getMonth()]} ${d.getFullYear()}`;
   if (f === 'long') return `${d.getDate()} ${MONL[d.getMonth()]} ${d.getFullYear()}`;
   if (f === 'iso') return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
   return `${p2(d.getDate())} ${MON[d.getMonth()]} ${d.getFullYear()}`;
@@ -168,9 +190,10 @@ export function fval(c: Col, v: any, fn: SumFn | null, fmt?: Record<string, stri
   if (v == null || v === '' || (typeof v === 'number' && isNaN(v))) return '';
   if (fn === 'count' || fn === 'countd') return v.toLocaleString('en-US');
   const f = (fmt && fmt[c.id]) || 'auto';
-  if (c.type === 'date') return fdate(v, f === 'auto' ? 'medium' : f);
+  if (c.type === 'date') return fdate(v, f === 'auto' || f === 'short' ? bucketFmt(c) : f);
   if (c.type === 'calc') {
     const k = c as CalcCol; const dp = k.dp ?? 2;
+    if (k.op === 'join') return String(v);
     if (k.kfmt === 'pct') return nf(v * 100, dp) + '%'; if (k.kfmt === 'money') return 'KD ' + nf(v, dp); return nf(v, dp);
   }
   if (isNum(c)) {
@@ -280,6 +303,10 @@ export function distinct(id: string): [string, number][] {
 /* ---------- query ---------- */
 const opv = (r: Row, o: Operand) => o.kind === 'num' ? parseFloat(o.v) : r[o.v];
 function calcVal(k: CalcCol, r: Row) {
+  if (k.op === 'join') {
+    const f = (x: any) => (x instanceof Date ? fdate(x) : x);
+    return [f(r[k.a.v]), f(r[k.b.v])].filter((x) => x != null && x !== '').join(k.sep ?? ' ');
+  }
   const a = opv(r, k.a), b = opv(r, k.b); if (a == null || b == null || isNaN(a) || isNaN(b)) return NaN;
   return k.op === 'add' ? a + b : k.op === 'sub' ? a - b : k.op === 'mul' ? a * b : (b === 0 ? NaN : a / b);
 }
@@ -310,6 +337,9 @@ export function ruleStyle(R: Spec, id: string, v: any, kind: 'detail' | 'summary
     if (r.col !== id) continue; if (r.applies !== 'both' && r.applies !== kind) continue;
     let ok = false; const a = parseFloat(r.a), b = parseFloat(r.b ?? '');
     if (r.op === 'contains') ok = String(v ?? '').toLowerCase().includes(String(r.a || '').toLowerCase());
+    else if (r.op === 'is') ok = String(v ?? '') === r.a;
+    else if (r.op === 'isnot') ok = String(v ?? '') !== r.a;
+    else if ((r.op === 'before' || r.op === 'after') && v instanceof Date) { const d = new Date(r.a); ok = r.op === 'before' ? v < d : v > d; }
     else if (typeof v === 'number' && !isNaN(v)) {
       const c = colOf(id, R.calcs) as CalcCol; const vv = c.type === 'calc' && c.kfmt === 'pct' ? v * 100 : v;
       ok = r.op === 'gt' ? vv > a : r.op === 'lt' ? vv < a : r.op === 'eq' ? vv === a : (vv >= a && vv <= b);
@@ -346,7 +376,7 @@ export type TRow =
   | { k: 'grand'; rows: Row[] };
 export interface TableModel { cols: string[]; rows: TRow[]; error?: string; info: { total?: number; from?: number; to?: number; groups?: number; pages: number; pg: number; unit?: 'lines' } }
 
-const gkey = (R: Spec, r: Row, g: string) => r[g] instanceof Date ? fdate(r[g], R.fmt[g]) : r[g];
+const gkey = (R: Spec, r: Row, g: string) => r[g] instanceof Date ? fdate(r[g], R.fmt[g] && R.fmt[g] !== 'short' ? R.fmt[g] : bucketFmt(colOf(g, R.calcs))) : r[g];
 export function allKeys(R: Spec, rows: Row[]) {
   const ks: string[] = [];
   const walk = (rs: Row[], lvl: number, key: string) => {

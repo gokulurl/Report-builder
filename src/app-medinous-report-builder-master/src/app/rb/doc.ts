@@ -4,8 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { DocState, RbStore, Run, snapOf } from './store';
-import { CAT, Clause, MyReport, Notify, Period, Row, Spec, Template, allKeys, buildTable, chartModel, cmp, colOf, distinct, fval, hm, isNum, periodErr, resolveRange } from './engine';
-import { TOPICS, clauseErr, colOrder, docSentence, groupable, isAmount, lockedColD, newClause, rowsForDoc } from './staff';
+import { CAT, Clause, MyReport, Notify, Period, Row, Spec, Template, allKeys, buildTable, chartModel, cmp, colOf, distinct, fval, hm, isNum, periodErr, resolveRange, agg } from './engine';
+import { TOPICS, buildR, clauseErr, colOrder, docSentence, groupable, isAmount, isLockSum, isSummary, lockedColD, measLabel, measMap, newClause, rowsForDoc, sumGroups, sumMeasures } from './staff';
 import { CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
 import { RbChart, RbDialog, RbPop, RbTable } from './ui';
 import { RbPeriod, ScheduleDialog } from './dialogs';
@@ -53,10 +53,10 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
         @if (tab() === 'settings') {
           <div class="rb-sbody">
             <div class="rb-sbar">
-              <div class="rb-sbg"><mat-icon>dashboard_customize</mat-icon><b>Template</b>
+              <div class="rb-sbg"><mat-icon>assignment</mat-icon><b>Assigned report</b>
                 @if (d.kind === 'tpl') {
-                  <select #tsel class="rb-sel rb-tsel" [value]="d.tid" (change)="askSwitch($any($event.target).value, tsel)" aria-label="Template">
-                    @for (g of topics(); track g.name) { <optgroup [label]="g.name">@for (x of g.items; track x.id) { <option [value]="x.id" [selected]="x.id === d.tid">{{ x.title }}</option> }</optgroup> }
+                  <select #tsel class="rb-sel rb-tsel" [value]="d.tid" (change)="askSwitch($any($event.target).value, tsel)" aria-label="Assigned report">
+                    @for (g of topics(); track g.name) { <optgroup [label]="g.name">@for (x of g.items; track x.id) { <option [value]="x.id" [selected]="x.id === d.tid">{{ x.title }}{{ lockSum(x) ? ' (totals only)' : '' }}</option> }</optgroup> }
                   </select>
                 } @else { <span class="rb-tstatic">{{ t.title }}</span> }
               </div>
@@ -64,17 +64,15 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                 <rb-period [value]="d.period" (changed)="setPeriod($event)" />
                 @if (periodErr(d.period)) { <span class="rb-ferr inline">{{ periodErr(d.period) }}</span> }
               </div>
-              <div class="rb-sbg"><mat-icon>account_tree</mat-icon><b>Group by</b>
-                @for (i of [0, 1, 2]; track i) {
-                  @if (i === 0 || d.groups[i - 1]) {
-                    @if (i > 0) { <span class="muted tiny">then</span> }
-                    <select class="rb-sel rb-gs" [ngModel]="d.groups[i] || ''" (ngModelChange)="setGroup(i, $event)" [attr.aria-label]="groupLabels[i]">
-                      <option value="">{{ i ? 'Nothing more' : 'No grouping' }}</option>
-                      @for (c of groupable; track c.id) { @if (!d.groups.slice(0, i).includes(c.id)) { <option [value]="c.id">{{ c.label }}</option> } }
-                    </select>
-                  }
+              <div class="rb-sbg"><mat-icon>view_agenda</mat-icon><b>Show as</b>
+                @if (lockSum(t)) {
+                  <span class="rb-tstatic rb-locked" matTooltip="Your IT team has set this report to show totals, not individual lines"><mat-icon class="xs">lock</mat-icon>Summary report only</span>
+                } @else {
+                  <span class="fx-seg sm rb-showas" role="radiogroup" aria-label="Show as">
+                    <button role="radio" [class.on]="!summary()" [attr.aria-checked]="!summary()" (click)="setView('detail')" matTooltip="Every line, with totals for each group"><mat-icon>list_alt</mat-icon>Detailed report</button>
+                    <button role="radio" [class.on]="summary()" [attr.aria-checked]="summary()" (click)="setView('summary')" matTooltip="One row per group, with counts and totals"><mat-icon>table_rows</mat-icon>Summary report</button>
+                  </span>
                 }
-                @if (groupsChanged()) { <button class="fx-link tiny" (click)="d.groups = t.groups.slice(0, 2); s.bump()" [matTooltip]="resetHint()">Reset</button> }
               </div>
             </div>
             <div class="rb-scols">
@@ -107,6 +105,17 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                 @if (d.clauses.length > 1) { <p class="muted tiny">Several values in one filter means any of them. Different filters must all match.</p> }
                 @if (t.scope.length) { <div class="rb-lockline"><mat-icon>lock</mat-icon>Always limited to {{ s.scopeText(t) }}, set by IT</div> }
               </aside>
+              @if (summary()) {
+                <section class="rb-spanel rb-colpanel">
+                  <div class="rb-sph"><mat-icon>functions</mat-icon><b>Figures for each group</b><span class="muted tiny">{{ figures().length }} of {{ allFigures().length }}</span></div>
+                  @for (k of allFigures(); track k) {
+                    @let on = figures().includes(k);
+                    <label class="rb-ccol" [matTooltip]="on && figures().length === 1 ? 'At least one figure is needed' : ''">
+                      <input type="checkbox" [checked]="on" [disabled]="on && figures().length === 1" (change)="toggleFigure(k)" /><span>{{ figLabel(k) }}</span></label>
+                  }
+                  <p class="muted tiny">Each group shows these figures, with subtotals and a grand total.</p>
+                </section>
+              } @else {
               <section class="rb-spanel rb-colpanel">
                 <div class="rb-sph"><mat-icon>view_column</mat-icon><b>Columns and sort</b><span class="muted tiny">{{ visibleCols().length }} of {{ t.cols.length }} shown</span></div>
                 <div class="rb-colist" cdkDropList (cdkDropListDropped)="dropCol($event)" role="list" aria-label="Columns, in order">
@@ -141,13 +150,43 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                   }
                 </div>
               </section>
+              }
+              <section class="rb-spanel rb-grppanel">
+                <div class="rb-sph"><mat-icon>account_tree</mat-icon><b>Group by</b>@if (groupsChanged()) { <button class="fx-link tiny" (click)="d.groups = t.groups.slice(0, 2); s.bump()" [matTooltip]="resetHint()">Reset</button> }</div>
+                @for (i of [0, 1, 2]; track i) {
+                  @if (i === 0 || groupsNow()[i - 1]) {
+                    <label class="rb-flab">{{ groupLabels[i] }}
+                    <select class="rb-sel full" [ngModel]="groupsNow()[i] || ''" (ngModelChange)="setGroup(i, $event)" [attr.aria-label]="groupLabels[i]">
+                      @if (i > 0 || !summary()) { <option value="">{{ i ? 'Nothing more' : 'No grouping' }}</option> }
+                      @for (c of groupable; track c.id) { @if (!groupsNow().slice(0, i).includes(c.id)) { <option [value]="c.id">{{ c.label }}</option> } }
+                    </select></label>
+                  }
+                }
+              </section>
               </div>
               <div class="rb-scol-main">
                 <div class="rb-sentence"><mat-icon>visibility</mat-icon><span>{{ sentence() }}</span></div>
                 <section class="rb-spanel">
-                  <div class="rb-sph"><mat-icon>science</mat-icon><b>Sample only</b><span class="muted tiny">The first 10 lines with these settings, before grouping and totals. Run report for every line and the totals.</span>
+                  <div class="rb-sph"><mat-icon>science</mat-icon><b>Sample only</b><span class="muted tiny">{{ summary() ? 'Summary report: the first 10 groups with these settings, one row each. Run report for every group, subtotals and the grand total.' : 'The first 10 lines with these settings, before grouping and totals. Run report for every line and the totals.' }}</span>
                     <button class="fx-btn fx-btn-primary fx-btn-sm rb-sph-r" (click)="doRun()"><mat-icon>play_arrow</mat-icon>Run report</button></div>
                   @if (periodErr(d.period)) { <div class="rb-pvempty"><mat-icon>event_busy</mat-icon>Choose a valid period to see a preview.</div> }
+                  @else if (summary()) {
+                    @if (sumSample(); as sm) {
+                      @if (!sm.total) { <div class="rb-pvempty"><mat-icon>search_off</mat-icon>No lines match this period@if (d.clauses.length) { and these filters}.</div> }
+                      @else {
+                        <div class="rb-pvwrap"><table class="rb-pvt"><thead><tr>
+                          @for (g of sm.groups; track g) { <th>{{ label(g) }}</th> }
+                          @for (k of figures(); track k) { <th class="n">{{ figLabel(k) }}</th> }
+                        </tr></thead><tbody>
+                          @for (row of sm.rows; track $index) { <tr>
+                            @for (v of row.keys; track $index) { <td>{{ v }}</td> }
+                            @for (v of row.vals; track $index) { <td class="n">{{ v }}</td> }
+                          </tr> }
+                        </tbody></table></div>
+                        <p class="muted tiny rb-pvnote">{{ sm.total.toLocaleString() }} {{ sm.total === 1 ? 'group' : 'groups' }} in this period.@if (sm.total > 10) { Showing the first 10.}</p>
+                      }
+                    }
+                  }
                   @else if (!preview().length) { <div class="rb-pvempty"><mat-icon>search_off</mat-icon>No lines match this period@if (d.clauses.length) { and these filters}.</div> }
                   @else {
                     <div class="rb-pvwrap"><table class="rb-pvt"><thead><tr>@for (c of visibleCols(); track c) {
@@ -178,12 +217,6 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                 <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="doRun()"><mat-icon>play_arrow</mat-icon>Run again</button></div>
             }
             <div class="rb-vbar">
-              @if (t.summaries.length) {
-                <span class="fx-seg sm" role="tablist">
-                  <button role="tab" [class.on]="!stab()" (click)="setStab(0)">Lines</button>
-                  @for (x of t.summaries; track x.id; let i = $index) { <button role="tab" [class.on]="stab() === i + 1" (click)="setStab(i + 1)">{{ x.name }}</button> }
-                </span>
-              }
               <label class="fx-search rb-find"><mat-icon>search</mat-icon><input [ngModel]="find()" (ngModelChange)="find.set($event); page.set(0)" placeholder="Find in results" aria-label="Find in results" /></label>
               @if (lr.R.groups.length && lr.R.show.detail && !stab()) {
                 <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="toggleAll()"><mat-icon>{{ collapsed().length ? 'unfold_more' : 'unfold_less' }}</mat-icon>{{ collapsed().length ? 'Expand all' : 'Collapse all' }}</button>
@@ -197,7 +230,7 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                 <button class="fx-link tiny" (click)="sel.set(newSet())">Clear</button></div>
             }
             @if (!stab() && lr.R.display.mode !== 'table') { <rb-chart [model]="chart()" /> }
-            <rb-table [model]="table()" [spec]="spec()" [total]="rows().length" [sort]="sort() ? [sort()!] : spec().sorts" [pins]="stab() ? [] : t.pins" [widths]="d.widths || {}" (resized)="setWidth($event.id, $event.w)"
+            <rb-table [model]="table()" [spec]="spec()" [total]="rows().length" [sort]="sort() ? [sort()!] : spec().sorts" [pins]="stab() || summary() ? [] : t.pins" [labels]="sumLabels()" [widths]="d.widths || {}" (resized)="setWidth($event.id, $event.w)"
                       [find]="find()" [selected]="selectable() ? sel() : null" (toggle)="toggleGroup($event)" (page)="page.set(page() + $event)"
                       (rowClick)="toggleSel($event)" (drill)="drill($event)" (headerMenu)="pop.set({ kind: 'header', el: $event.el, col: $event.id })" />
           } @else {
@@ -260,9 +293,9 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
       </rb-dialog>
     }
     @if (switchTo(); as sw) {
-      <rb-dialog title="Switch template?" (closed)="cancelSwitch()">
+      <rb-dialog title="Switch assigned report?" (closed)="cancelSwitch()">
         <p class="muted tiny">Switching to {{ s.tpl(sw.tid).title }} resets your column choices, sort and grouping. The period and filters are kept.</p>
-        <ng-container foot><button class="fx-btn fx-btn-secondary" (click)="cancelSwitch()">Keep current template</button><button class="fx-btn fx-btn-primary" (click)="switchTemplate(sw.tid)">Switch</button></ng-container>
+        <ng-container foot><button class="fx-btn fx-btn-secondary" (click)="cancelSwitch()">Keep current report</button><button class="fx-btn fx-btn-primary" (click)="switchTemplate(sw.tid)">Switch</button></ng-container>
       </rb-dialog>
     }
     @if (leaving()) {
@@ -329,9 +362,38 @@ export class RbDoc {
   order = computed(() => { this.s.rev(); return colOrder(this.tpl(), this.doc()); });
   visibleCols = computed(() => this.order().filter((c) => !this.doc().hidden.includes(c)));
   /** Headline figures for the run: lines, invoices, and the total of the main amount. */
+  summary = computed(() => { this.s.rev(); return isSummary(this.tpl(), this.doc()); });
+  /** The grouping shown: a summary always has one (the report's, the template's, or by day). */
+  groupsNow = computed(() => { this.s.rev(); return this.summary() ? sumGroups(this.tpl(), this.doc()) : this.doc().groups; });
+  allFigures = computed(() => Object.keys(measMap(this.tpl())));
+  figures = computed(() => { this.s.rev(); return sumMeasures(this.tpl(), this.doc()); });
+  lockSum(t: Template) { return isLockSum(t); }
+  figLabel(k: string) { return measLabel(this.tpl(), k); }
+  /** First 10 groups of the summary with their figures (RB-B6 sample). */
+  sumSample = computed(() => {
+    this.s.rev(); const t = this.tpl(), d = this.doc(); if (periodErr(d.period)) return null;
+    const R = buildR(t, d); const rows = rowsForDoc(t, d); const m = new Map<string, Row[]>();
+    rows.forEach((r) => { const k = R.groups.map((g) => (r[g] instanceof Date ? +r[g] : r[g])).join('|'); if (!m.has(k)) m.set(k, []); m.get(k)!.push(r); });
+    const ents = [...m.values()].sort((a, b) => { for (const g of R.groups) { const x = cmp(a[0][g], b[0][g]); if (x) return x; } return 0; });
+    return {
+      groups: R.groups, total: ents.length,
+      rows: ents.slice(0, 10).map((grs) => ({
+        keys: R.groups.map((g) => fval(colOf(g, t.calcs), grs[0][g], null, R.fmt)),
+        vals: this.figures().map((k) => { const fn = R.sums[k]; const v = agg(grs, k, fn, t.calcs); return fval(colOf(k, t.calcs), v, fn, R.fmt) + (fn === 'countd' && k === 'inv' ? (v === 1 ? ' invoice' : ' invoices') : ''); }),
+      })),
+    };
+  });
+  /** Choosing Summary with no grouping groups by the report's grouping, or by day, and says so. */
+  setView(v: 'detail' | 'summary') {
+    const d = this.doc(), t = this.tpl(); d.view = v;
+    if (v === 'summary' && !d.groups.length) { d.groups = t.groups.length ? t.groups.slice(0, 2) : ['dday']; this.s.toast('Grouped by ' + this.groupNames(d.groups) + '. Change it under Group by'); }
+    this.s.bump();
+  }
+  toggleFigure(k: string) { const d = this.doc(); const h = d.mhidden || []; d.mhidden = h.includes(k) ? h.filter((x) => x !== k) : [...h, k]; this.s.bump(); }
   kpis = computed<[string, string][]>(() => {
     const r = this.run(); if (!r) return [];
     const out: [string, string][] = [[r.rows.length.toLocaleString(), this.s.noun(this.tpl())]];
+    if (!r.R.show.detail && r.R.groups.length) { const n = new Set(r.rows.map((x) => r.R.groups.map((g) => (x[g] instanceof Date ? +x[g] : x[g])).join('|'))).size; out.unshift([n.toLocaleString(), n === 1 ? 'group' : 'groups']); }
     if (r.rows.some((x) => x['inv'])) out.push([new Set(r.rows.map((x) => x['inv'])).size.toLocaleString(), 'invoices']);
     const money = r.R.cols.filter((c) => colOf(c, r.R.calcs)?.type === 'money'); const m = money.includes('net') ? 'net' : money[0];
     if (m) out.push([fval(colOf(m), r.rows.reduce((a, x) => a + (x[m] || 0), 0), 'sum', {}), colOf(m).label.toLowerCase()]);
@@ -352,7 +414,8 @@ export class RbDoc {
     const r = this.run(); if (!r) return []; const so = this.sort();
     return so ? [...r.rows].sort((a, b) => cmp(a[so.col], b[so.col]) * (so.dir === 'asc' ? 1 : -1)) : r.rows;
   });
-  table = computed(() => buildTable(this.spec(), this.rows(), { collapsed: new Set(this.stab() ? [] : this.collapsed()), page: this.page(), find: this.find(), only: false, pins: this.stab() ? [] : this.tpl().pins }));
+  table = computed(() => buildTable(this.spec(), this.rows(), { collapsed: new Set(this.stab() ? [] : this.collapsed()), page: this.page(), find: this.find(), only: false, pins: this.stab() || this.summary() ? [] : this.tpl().pins }));
+  sumLabels = computed(() => (this.summary() ? Object.fromEntries(this.figures().map((k) => [k, this.figLabel(k)])) : {}));
   chart = computed(() => chartModel(this.spec(), this.rows()));
   selectable = computed(() => { const r = this.run(); return !!r && !this.stab() && !(r.R.groups.length && !r.R.show.detail); });
   selInv = computed(() => new Set(this.run()?.rows.filter((x) => this.sel().has(x._i)).map((x) => x['inv'])).size);
@@ -372,8 +435,8 @@ export class RbDoc {
   setPeriod(p: Period) { this.doc().period = p; this.s.bump(); }
   /** Choosing a level keeps the levels above it; levels below are kept unless they repeat the new choice. */
   setGroup(i: number, v: string) {
-    const d = this.doc(); const above = d.groups.slice(0, i);
-    d.groups = v ? [...above, v, ...d.groups.slice(i + 1).filter((x) => x !== v && !above.includes(x))].slice(0, 3) : above;
+    const d = this.doc(); const cur = this.groupsNow(); const above = cur.slice(0, i);
+    d.groups = v ? [...above, v, ...cur.slice(i + 1).filter((x) => x !== v && !above.includes(x))].slice(0, 3) : above;
     this.s.bump();
   }
   resetHint() { const g = this.tpl().groups.slice(0, 2); return 'Back to the report’s grouping' + (g.length ? ': ' + this.groupNames(g) : ''); }
