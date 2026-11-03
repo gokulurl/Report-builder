@@ -75,10 +75,20 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                 }
               </div>
             </div>
-            <div class="rb-scols">
-              <div class="rb-scol-left">
-              <aside class="rb-spanel rb-filters">
-                <div class="rb-sph"><mat-icon>filter_alt</mat-icon><b>Filters</b><span class="muted tiny">optional</span></div>
+            <div class="rb-scols" [class.narrow]="!paneOpen()">
+              @if (!paneOpen()) {
+                <aside class="rb-spane closed">
+                  <button class="fx-icon-btn" (click)="paneOpen.set(true)" aria-label="Expand settings" matTooltip="Show settings"><mat-icon>chevron_right</mat-icon></button>
+                  @for (x of railItems(); track x[0]) {
+                    <button class="rb-vtab" (click)="openPs(x[0])" [matTooltip]="x[2] + ': ' + psum()[x[0]]"><mat-icon>{{ x[1] }}</mat-icon><span>{{ x[2] }}@if (x[3]) { <em>{{ x[3] }}</em> }</span></button>
+                  }
+                </aside>
+              } @else {
+              <aside class="rb-spane">
+              <div class="rb-spaneh"><b>Report settings</b><button class="fx-icon-btn" (click)="paneOpen.set(false)" aria-label="Collapse settings" matTooltip="Collapse, to widen the sample"><mat-icon>chevron_left</mat-icon></button></div>
+              <section class="rb-psec" [class.open]="ps()['filters']">
+                <button class="rb-psh" (click)="togglePs('filters')" [attr.aria-expanded]="!!ps()['filters']"><mat-icon class="rb-psi">filter_alt</mat-icon><b>Filters</b><span class="rb-pss">{{ psum()['filters'] }}</span><mat-icon class="rb-pse">{{ ps()['filters'] ? 'expand_less' : 'expand_more' }}</mat-icon></button>
+                @if (ps()['filters']) { <div class="rb-psb">
                 @for (c of d.clauses; track c.id) {
                   @let err = c.touched ? clauseErr(c) : '';
                   <div class="rb-fitem" [class.bad]="err">
@@ -104,20 +114,24 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                 <button class="fx-btn fx-btn-secondary fx-btn-sm rb-addf" (click)="pop.set({ kind: 'add', el: $any($event.currentTarget) })"><mat-icon>add</mat-icon>Add filter</button>
                 @if (d.clauses.length > 1) { <p class="muted tiny">Several values in one filter means any of them. Different filters must all match.</p> }
                 @if (t.scope.length) { <div class="rb-lockline"><mat-icon>lock</mat-icon>Always limited to {{ s.scopeText(t) }}, set by IT</div> }
-              </aside>
+              </div> }
+              </section>
               @if (summary()) {
-                <section class="rb-spanel rb-colpanel">
-                  <div class="rb-sph"><mat-icon>functions</mat-icon><b>Figures for each group</b><span class="muted tiny">{{ figures().length }} of {{ allFigures().length }}</span></div>
+                <section class="rb-psec" [class.open]="ps()['cols']">
+                <button class="rb-psh" (click)="togglePs('cols')" [attr.aria-expanded]="!!ps()['cols']"><mat-icon class="rb-psi">functions</mat-icon><b>Figures</b><span class="rb-pss">{{ psum()['cols'] }}</span><mat-icon class="rb-pse">{{ ps()['cols'] ? 'expand_less' : 'expand_more' }}</mat-icon></button>
+                @if (ps()['cols']) { <div class="rb-psb">
                   @for (k of allFigures(); track k) {
                     @let on = figures().includes(k);
                     <label class="rb-ccol" [matTooltip]="on && figures().length === 1 ? 'At least one figure is needed' : ''">
                       <input type="checkbox" [checked]="on" [disabled]="on && figures().length === 1" (change)="toggleFigure(k)" /><span>{{ figLabel(k) }}</span></label>
                   }
                   <p class="muted tiny">Each group shows these figures, with subtotals and a grand total.</p>
-                </section>
+                </div> }
+              </section>
               } @else {
-              <section class="rb-spanel rb-colpanel">
-                <div class="rb-sph"><mat-icon>view_column</mat-icon><b>Columns and sort</b><span class="muted tiny">{{ visibleCols().length }} of {{ t.cols.length }} shown</span></div>
+              <section class="rb-psec" [class.open]="ps()['cols']">
+                <button class="rb-psh" (click)="togglePs('cols')" [attr.aria-expanded]="!!ps()['cols']"><mat-icon class="rb-psi">view_column</mat-icon><b>Columns and sort</b><span class="rb-pss">{{ psum()['cols'] }}</span><mat-icon class="rb-pse">{{ ps()['cols'] ? 'expand_less' : 'expand_more' }}</mat-icon></button>
+                @if (ps()['cols']) { <div class="rb-psb">
                 <div class="rb-colist" cdkDropList (cdkDropListDropped)="dropCol($event)" role="list" aria-label="Columns, in order">
                   @for (id of order(); track id; let i = $index; let last = $last) {
                     @let lr = locked(id);
@@ -149,10 +163,12 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                     }
                   }
                 </div>
+              </div> }
               </section>
               }
-              <section class="rb-spanel rb-grppanel">
-                <div class="rb-sph"><mat-icon>account_tree</mat-icon><b>Group by</b>@if (groupsChanged()) { <button class="fx-link tiny" (click)="d.groups = t.groups.slice(0, 2); s.bump()" [matTooltip]="resetHint()">Reset</button> }</div>
+              <section class="rb-psec" [class.open]="ps()['group']">
+                <button class="rb-psh" (click)="togglePs('group')" [attr.aria-expanded]="!!ps()['group']"><mat-icon class="rb-psi">account_tree</mat-icon><b>Group by</b><span class="rb-pss">{{ psum()['group'] }}</span><mat-icon class="rb-pse">{{ ps()['group'] ? 'expand_less' : 'expand_more' }}</mat-icon></button>
+                @if (ps()['group']) { <div class="rb-psb">
                 @for (i of [0, 1, 2]; track i) {
                   @if (i === 0 || groupsNow()[i - 1]) {
                     <label class="rb-flab">{{ groupLabels[i] }}
@@ -162,8 +178,11 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                     </select></label>
                   }
                 }
+                @if (groupsChanged()) { <button class="fx-link tiny" (click)="d.groups = t.groups.slice(0, 2); s.bump()" [matTooltip]="resetHint()">Back to the report's grouping</button> }
+              </div> }
               </section>
-              </div>
+              </aside>
+              }
               <div class="rb-scol-main">
                 <div class="rb-sentence"><mat-icon>visibility</mat-icon><span>{{ sentence() }}</span></div>
                 <section class="rb-spanel">
@@ -440,6 +459,27 @@ export class RbDoc {
     this.s.bump();
   }
   resetHint() { const g = this.tpl().groups.slice(0, 2); return 'Back to the report’s grouping' + (g.length ? ': ' + this.groupNames(g) : ''); }
+  /** Report settings pane: collapsible sections, and a narrow rail when collapsed. */
+  paneOpen = signal(true);
+  ps = signal<Record<string, boolean>>({ filters: true });
+  togglePs(k: string) { this.ps.update((x) => ({ ...x, [k]: !x[k] })); }
+  openPs(k: string) { this.ps.update((x) => ({ ...x, [k]: true })); this.paneOpen.set(true); }
+  psum = computed<Record<string, string>>(() => {
+    this.s.rev(); const d = this.doc(), t = this.tpl(); const nf = d.clauses.length; const g = this.groupsNow();
+    return {
+      filters: nf ? nf + (nf === 1 ? ' filter' : ' filters') : 'None',
+      cols: this.summary() ? this.figures().length + ' of ' + this.allFigures().length + ' shown' : this.visibleCols().length + ' of ' + t.cols.length + ' shown' + (d.sorts.length ? ', sorted' : ''),
+      group: g.length ? this.groupNames(g) : 'None',
+    };
+  });
+  railItems = computed<[string, string, string, string][]>(() => {
+    this.s.rev(); const d = this.doc(), t = this.tpl(); const g = this.groupsNow();
+    return [
+      ['filters', 'filter_alt', 'Filters', d.clauses.length ? String(d.clauses.length) : ''],
+      this.summary() ? ['cols', 'functions', 'Figures', this.figures().length + '/' + this.allFigures().length] : ['cols', 'view_column', 'Columns', this.visibleCols().length + '/' + t.cols.length],
+      ['group', 'account_tree', 'Group by', g.length ? String(g.length) : ''],
+    ];
+  });
   groupNames(g: string[]) { return g.map((x) => this.label(x)).join(', then '); }
   moveCol(i: number, dir: number) { const o = [...this.order()]; const j = i + dir; [o[i], o[j]] = [o[j], o[i]]; this.doc().order = o; this.s.bump(); }
   dropCol(e: CdkDragDrop<string[]>) { if (e.previousIndex === e.currentIndex) return; const o = [...this.order()]; moveItemInArray(o, e.previousIndex, e.currentIndex); this.doc().order = o; this.s.bump(); }

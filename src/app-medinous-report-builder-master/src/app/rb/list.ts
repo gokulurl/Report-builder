@@ -10,6 +10,7 @@ import { TOPICS, clauseErr, clauseText, isLockSum, nextRun, shortPeriod } from '
 import { RbDialog, RbPop } from './ui';
 import { ScheduleDialog } from './dialogs';
 import { ShareDialog } from './share-dialog';
+import { RunDialog } from './run-dialog';
 
 type View = 'all' | 'fav' | 'sched' | 'shared' | 'tpl' | 'soon:kpi' | 'soon:uns' | string; // string = folder id
 type Pop =
@@ -20,7 +21,7 @@ type Pop =
 /** Staff home: views on the left (like a mail client), one flat table for the chosen view on the right. */
 @Component({
   selector: 'rb-list',
-  imports: [FormsModule, NgTemplateOutlet, MatIconModule, MatTooltipModule, RbDialog, RbPop, ScheduleDialog, ShareDialog],
+  imports: [FormsModule, NgTemplateOutlet, MatIconModule, MatTooltipModule, RbDialog, RbPop, ScheduleDialog, ShareDialog, RunDialog],
   template: `
     <div class="rb-page" [attr.data-rev]="s.rev()">
       <div class="rb-dhead">
@@ -139,7 +140,7 @@ type Pop =
                 @else { <span aria-label="Not run yet">—</span> }
               </td>
               <td class="rb-lact" (click)="$event.stopPropagation()">
-                <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="open(r, true)"><mat-icon>play_arrow</mat-icon>Run</button>
+                <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="running.set({ r })"><mat-icon>play_arrow</mat-icon>Run</button>
                 <button class="fx-btn fx-btn-secondary fx-btn-sm rb-vebtn" (click)="open(r)" [attr.aria-label]="'View or edit ' + r.name"><mat-icon>edit_note</mat-icon><span>View/Edit</span></button>
                 <button class="fx-icon-btn" (click)="pop.set({ kind: 'row', el: $any($event.currentTarget), r })" [attr.aria-label]="'More actions for ' + r.name" aria-haspopup="menu"><mat-icon>more_horiz</mat-icon></button>
               </td>
@@ -159,7 +160,7 @@ type Pop =
                 <div class="rb-sub rb-meta2 flush"><span class="muted tiny">{{ topic(t.id) }}</span>@if (lockSum(t)) { <span class="rb-tag info">Totals only</span> }@if (t.heavy) { <span class="rb-tag mute">Often runs in background</span> }</div></td>
               <td class="muted tiny"><span class="rb-clamp">{{ t.desc }}</span></td>
               <td class="rb-lact" (click)="$event.stopPropagation()">
-                <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="openTpl(t.id, true)"><mat-icon>play_arrow</mat-icon>Run</button>
+                <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="running.set({ t: t.id })"><mat-icon>play_arrow</mat-icon>Run</button>
                 <button class="fx-btn fx-btn-secondary fx-btn-sm rb-vebtn" (click)="openTpl(t.id)" [attr.aria-label]="'View or edit ' + t.title"><mat-icon>edit_note</mat-icon><span>View/Edit</span></button>
               </td>
             </tr>
@@ -186,18 +187,15 @@ type Pop =
           @case ('row') {
             @if (p.kind === 'row') {
               @let r = p.r; @let own = r.owner === 'me';
-              <div class="rb-mlab">Download with its saved values</div>
-              @for (f of downloads; track f[0]) { <button class="rb-mi" (click)="download(r, f[0])"><mat-icon>{{ f[1] }}</mat-icon>{{ f[2] }}</button> }
-              <div class="rb-msep"></div>
               @if (own) {
                 <button class="rb-mi" (click)="pop.set(null); sharing.set(r)"><mat-icon>person_add</mat-icon>Share and access…</button>
                 <button class="rb-mi" (click)="pop.set(null); renameOf.set(r); renameTo = r.name; renameErr.set(''); dlg.set('rename')"><mat-icon>edit</mat-icon>Rename</button>
                 <div class="rb-mlab">Move to folder</div>
-                <button class="rb-mi" [class.on]="!r.folder" (click)="move(r, null)"><mat-icon>block</mat-icon>No folder</button>
-                @for (f of s.folders; track f.id) { <button class="rb-mi" [class.on]="r.folder === f.id" (click)="move(r, f.id)"><mat-icon>folder</mat-icon>{{ f.name }}</button> }
+                <button class="rb-mi" [class.on]="!r.folder" (click)="move(r, null)"><mat-icon>close</mat-icon>No folder</button>
+                @for (f of s.folders; track f.id) { <button class="rb-mi" [class.on]="r.folder === f.id" (click)="move(r, f.id)"><mat-icon class="rb-fic">folder</mat-icon>{{ f.name }}</button> }
                 <div class="rb-msep"></div>
               }
-              <button class="rb-mi" (click)="pop.set(null); s.duplicate(r); s.toast(own ? 'Duplicated' : 'Saved a copy to your reports')"><mat-icon>content_copy</mat-icon>{{ own ? 'Duplicate' : 'Save a copy' }}</button>
+              <button class="rb-mi" (click)="pop.set(null); s.duplicate(r); s.toast(own ? 'Duplicated' : 'Saved a copy to your reports')"><mat-icon>add</mat-icon>{{ own ? 'Duplicate' : 'Save a copy' }}</button>
               @if (own) { <button class="rb-mi" (click)="pop.set(null); deleting.set(r); dlg.set('delete')"><mat-icon>delete_outline</mat-icon>Delete</button> }
             }
           }
@@ -250,14 +248,15 @@ type Pop =
     }
     @if (schedEdit(); as sc) { <rb-schedule [report]="s.rep(sc.src)!" [existing]="sc" (closed)="schedEdit.set(null)" /> }
     @if (sharing(); as r) { <rb-share [report]="r" (closed)="sharing.set(null)" /> }
-  `,
+  
+    @if (running(); as x) { <rb-run [report]="x.r || null" [tplId]="x.t || ''" (closed)="running.set(null)" /> }`,
 })
 export class RbList {
   fdate = fdate; hm = hm;
-  downloads: [string, string, string][] = [['pdf', 'picture_as_pdf', 'PDF'], ['xlsx', 'grid_on', 'Excel'], ['csv', 'description', 'CSV']];
   q = signal('');
   view = signal<View>('all');
   pop = signal<Pop | null>(null);
+  running = signal<{ r?: MyReport; t?: string } | null>(null);
   dlg = signal<'folder' | 'delfolder' | 'rename' | 'delete' | null>(null);
   schedEdit = signal<Schedule | null>(null);
   sharing = signal<MyReport | null>(null);
@@ -328,14 +327,6 @@ export class RbList {
   open(r: MyReport, run = false) { this.router.navigate(['/report', 'rep', r.id], { queryParams: run ? { run: 1 } : {} }); }
   fav(r: MyReport) { r.fav = !r.fav; this.s.bump(); this.s.toast(r.fav ? 'Added to Favourites' : 'Removed from Favourites'); }
   move(r: MyReport, folder: string | null) { r.folder = folder; this.pop.set(null); this.s.bump(); this.s.toast(folder ? 'Moved to ' + this.folderOfRep(r) : 'Removed from its folder'); }
-  /** Download straight from the list with the report's saved values; large reports are prepared in the background. */
-  download(r: MyReport, ext: string) {
-    this.pop.set(null); const t = this.s.tpl(r.tid);
-    if (t.heavy) {
-      this.s.toast(`${r.name} is being prepared in the background. You'll be notified when the ${ext.toUpperCase()} is ready`);
-      setTimeout(() => { this.s.notes.unshift({ id: Date.now(), text: `${r.name} (${ext.toUpperCase()}) is ready to download`, key: 'rep:' + r.id, at: new Date(), read: false, email: false }); this.s.bump(); }, 6000);
-    } else this.s.toast(`Downloaded ${r.name}.${ext}`);
-  }
   retry(sc: Schedule) { sc.last = { at: new Date(), ok: true }; this.s.bump(); this.s.toast('Run and delivered'); }
   delSched(sc: Schedule) { this.s.scheds = this.s.scheds.filter((x) => x !== sc); this.pop.set(null); this.s.bump(); this.s.toast('Schedule deleted'); }
   openFolderDlg(f: Folder | null) { this.folderOf.set(f); this.folderName = f?.name || ''; this.folderErr.set(''); this.dlg.set('folder'); }
