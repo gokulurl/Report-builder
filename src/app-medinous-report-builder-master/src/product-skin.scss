@@ -1,0 +1,71 @@
+// Product skin: the current Medinous Fusion styling (the devs' _colors, _typography, _popup, _tabpanel,
+// _grid, _group-grid, _expansion-panel, _right-panel, _listview, _buttons, _inputs), applied over the
+// Report Builder without changing its layout. Values are the x-large breakpoint (1440px+).
+// Loaded last from styles.scss: remove that one @use to go back.
+
+html:root {
+  --sk-secondary: #d0e2ff;      // $secondary / $popup-header-bgcolor
+  --sk-chief-text: #001448;     // $chief-text-color (grid text)
+  --sk-strip-text: #352c49;     // $strip-text-color (tabs, more-menu)
+  --sk-alt-row: #f0f6ff;        // $alt-grid-row-color
+  --sk-text-bg-grey: #f8f9fa;   // $text-bgcolor-grey
+  --sk-header-border: #e6e6e6;  // $header-border-color
+  --sk-error: #f31700;          // .errorText
+  --field: rgba(0, 0, 0, 0.38); // .form-control border
+}
+
+/* ---------- Buttons (_buttons.scss): $fs-content, padding 6px 12px, no uppercase ---------- */
+.fx-btn { font-size: 13px; padding: 0 12px; height: 32px; text-transform: none; }
+.fx-btn.fx-btn-sm { height: 28px; padding: 0 10px; font-size: 13px; }
+
+/* ---------- Inputs (_inputs.scss / _kendo-input.scss) ---------- */
+select, .rb-sel, .rb-inp, .rb-ta,
+input:not([type='checkbox']):not([type='radio']):not([type='color']), textarea {
+  color: rgba(0, 0, 0, 0.87);
+  &:hover:not(:disabled):not(:focus) { border-color: rgba(0, 0, 0, 0.87); }
+}
+.rb-ferr, .rb-perr { color: var(--sk-error); font-style: italic; }
+
+/* ---------- Dialog (_popup.scss + popup footer-bar) ---------- */
+.rb-dlg {
+  > h3 {
+    margin: -18px -20px 14px; padding: 12px 20px; background: var(--sk-secondary);
+    font-size: 14.4px; font-weight: 500; line-height: 21px; color: #000;
+  }
+}
+.rb-dlg-foot { margin: 18px -20px -16px; padding: 8px 20px; border-top: 1px solid var(--blue); background: #fff; }
+
+/* ---------- Tabs (_tabpanel.scss) ---------- */
+.rb-htabs, .rb-qtabs, .rb-tabs { border-bottom: 1px solid var(--blue); }
+.rb-htab, .rb-tab {
+  color: var(--sk-strip-text); font-weight: 500;
+  &:hover:not(.on) { color: #000; }
+  &.on { color: var(--blue); font-weight: 700; border-bottom-color: var(--blue); }
+}
+
+/* ---------- Grids (_grid.scss, _group-grid.scss) ---------- */
+table.rb-t, table.rb-pvt, table.rb-lt {
+  th { background: var(--sk-secondary); color: var(--sk-chief-text); font-weight: 700; border-bottom: 1px solid var(--line); }
+  td { color: var(--sk-chief-text); border-bottom: 1px solid var(--line); }
+}
+table.rb-t .rb-th, table.rb-pvt .rb-pvsort { color: var(--sk-chief-text); font-weight: 700; &:hover { background: rgba(0, 101, 203, 0.08); } }
+table.rb-t tbody tr:nth-child(even):not(.gh):not(.sub):not(.gt):not(.srow) td,
+table.rb-pvt tbody tr:nth-child(even) td { background: var(--sk-alt-row); }
+table.rb-t {
+  tr.gh td { background: var(--sk-secondary); color: #000; font-weight: 500; }
+  tr.gh:hover td { background: #c2d7f7; }
+}
+
+/* ---------- Panels (_expansion-panel.scss, _right-panel.scss) ---------- */
+.rb-spaneh { background: var(--sk-secondary); b { color: #000; } }
+.rb-psh { background: var(--sk-secondary); b { color: var(--sk-strip-text); } &:hover { background: #c2d7f7; } }
+.rb-psec.open .rb-psh { background: var(--sk-secondary); }
+.rb-spane.closed { background: var(--sk-text-bg-grey); }
+
+/* ---------- List view (_listview.scss): selected = $popup-header-bgcolor, bold black ---------- */
+.rb-lnav { background: var(--sk-text-bg-grey); }
+.rb-lnav-i.on { background: var(--sk-secondary); color: #000; font-weight: 700; .n { color: #000; } }
+
+/* ---------- Page header (_summary-page.scss): h4 $fs-title, black ---------- */
+.rb-dhead h1, .rb-lhead h1, .rb-ltitle { color: #000; }
+.fx-card, .rb-spanel { border-color: var(--sk-header-border); }
