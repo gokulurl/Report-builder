@@ -3,15 +3,15 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RbStore } from './store';
 import { MyReport, USERS } from './engine';
-import { RbDialog } from './ui';
+import { RbDialog, RbInfo } from './ui';
 
 /** Share and access: find colleagues by name, email or role; each one can run the report and save their own copy. */
 @Component({
   selector: 'rb-share',
-  imports: [MatIconModule, MatTooltipModule, RbDialog],
+  imports: [MatIconModule, MatTooltipModule, RbDialog, RbInfo],
   template: `
     <rb-dialog [title]="'Share ' + report().name" [width]="520" (closed)="closed.emit()">
-      <p class="muted tiny">People you add can run this report and save their own copy. They cannot change yours. Each person sees only the data their own access allows.</p>
+      <p class="muted tiny">They can run and copy it, not change it. <rb-info text="Each person sees only the data their own access allows." /></p>
       <label class="rb-flab">Add people
         <span class="fx-search"><mat-icon>search</mat-icon><input [value]="q()" (input)="q.set($any($event.target).value)" placeholder="Search by name, email or role" autocomplete="off" aria-label="Search people" /></span>
       </label>
@@ -30,7 +30,7 @@ import { RbDialog } from './ui';
           <div class="rb-shp"><mat-icon class="rb-shav">account_circle</mat-icon>
             <div><b>{{ u[0] }}</b><div class="muted tiny">{{ u[1] }}@if (u[2]) { · {{ u[2] }}}</div></div>
             <span class="muted tiny">Can run and save a copy</span>
-            <button class="fx-icon-btn sm" (click)="remove(p)" [attr.aria-label]="'Remove access for ' + u[0]" matTooltip="Remove access"><mat-icon>person_remove</mat-icon></button></div>
+            <button class="fx-icon-btn sm" (click)="remove(p)" [attr.aria-label]="'Remove access for ' + u[0]" matTooltip="Remove access. Takes effect when you save"><mat-icon>person_remove</mat-icon></button></div>
         } @empty { <p class="muted tiny">Only you can see this report.</p> }
       </div>
       <ng-container foot>

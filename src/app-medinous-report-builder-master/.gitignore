@@ -42,3 +42,6 @@ __screenshots__/
 # System files
 .DS_Store
 Thumbs.db
+
+# Licensed font files (Gilroy): kept locally, not redistributed in this public repo
+/public/fonts/

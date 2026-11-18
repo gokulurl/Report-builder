@@ -55,18 +55,30 @@ export class RbPop {
   @HostListener('document:keydown.escape') esc() { this.closed.emit(); }
 }
 
+/** The (i) beside a label: the sentence the label had no room for. Hover or focus shows it; a click or
+ *  tap toggles it, so it also works on touch. Never use it for an error or a warning: those stay visible. */
+@Component({
+  selector: 'rb-info',
+  imports: [MatIconModule, MatTooltipModule],
+  template: `<button type="button" class="rb-info" [attr.aria-label]="text()" [matTooltip]="text()" matTooltipClass="rb-tip"
+    #t="matTooltip" (click)="$event.stopPropagation(); $event.preventDefault(); t.toggle()"><mat-icon>info</mat-icon></button>`,
+})
+export class RbInfo {
+  text = input.required<string>();
+}
+
 /** The report table: grouping, subtotals, pinned columns, widths, wrap, highlight rules, find, drill and row selection. */
 @Component({
   selector: 'rb-table',
-  imports: [NgStyle, MatIconModule],
+  imports: [NgStyle, MatIconModule, MatTooltipModule],
   template: `
     @let m = model();
     @if (m.error === 'groups') {
-      <div class="rb-empty err"><mat-icon>warning</mat-icon><b>This grouping produces more than 1,000 groups</b>Add a filter, or group by a column with fewer values.</div>
+      <div class="rb-empty err"><mat-icon>warning</mat-icon><b>Over 1,000 groups</b>Filter, or group by a column with fewer values.</div>
     } @else if (!spec().cols.length) {
-      <div class="rb-empty"><b>Pick some columns to start</b>Add columns from the Columns tab and they appear here.</div>
+      <div class="rb-empty"><b>Add columns to start</b>From the Columns tab</div>
     } @else if (!total()) {
-      <div class="rb-empty"><b>No records match the selected criteria</b>Widen a filter, or choose a different date range.</div>
+      <div class="rb-empty"><b>Nothing matches</b>Widen a filter or the period.</div>
     } @else {
       <div class="rb-tw">
         <table class="rb-t" [class.compact]="density() === 'compact'">
@@ -74,7 +86,7 @@ export class RbPop {
             @if (grouped()) { <th class="pin gcol" style="left:0;z-index:3"><span class="rb-th">{{ groupHead() }}</span></th> }
             @for (id of m.cols; track id) {
               <th [class.n]="num(id)" [class.pin]="id in stick()" [ngStyle]="cellW(id, true)" [attr.data-col]="id">
-                <button class="rb-th" (click)="headerMenu.emit({ id, el: $any($event.currentTarget) })" aria-haspopup="menu">
+                <button [matTooltip]="restricted(id) ? 'Restricted. Exporting it asks for a reason' : ''" class="rb-th" (click)="headerMenu.emit({ id, el: $any($event.currentTarget) })" aria-haspopup="menu">
                   @if (id in stick()) { <mat-icon class="xs">push_pin</mat-icon> }
                   @if (num(id) && sortMark(id)) { <mat-icon class="xs">{{ sortMark(id) }}</mat-icon> }
                   <span>{{ label(id) }}</span>
@@ -97,7 +109,7 @@ export class RbPop {
                       @for (id of m.cols; track id) {
                         <td [class.n]="num(id)" [class.wrap]="wrap().includes(id)" [class.pin]="id in stick()" [ngStyle]="cellStyle(id, r.row[id], 'detail')">
                           @if (drillOf(id) && txt(id, r.row[id])) {
-                            <button class="rb-lnk" (click)="$event.stopPropagation(); drill.emit({ col: id, value: raw(r.row[id]) })" [innerHTML]="hl(txt(id, r.row[id]))"></button>
+                            <button matTooltip="Open the linked report filtered to this value" class="rb-lnk" (click)="$event.stopPropagation(); drill.emit({ col: id, value: raw(r.row[id]) })" [innerHTML]="hl(txt(id, r.row[id]))"></button>
                           } @else { <span [innerHTML]="hl(txt(id, r.row[id]))"></span> }
                         </td>
                       }
@@ -245,7 +257,7 @@ export class RbTable {
   template: `
     @let c = model();
     @if (!c) {
-      <div class="rb-chart empty muted tiny">Choose a label column and at least one value column to draw a chart.</div>
+      <div class="rb-chart empty muted tiny">Pick a label and a value column.</div>
     } @else if (c.type === 'pie' || c.type === 'doughnut') {
       <div class="rb-chart"><div class="rb-pie">
         <svg viewBox="0 0 300 260" role="img" [attr.aria-label]="c.type + ' chart of ' + c.series[0].name + ' by ' + c.label">
@@ -260,11 +272,11 @@ export class RbTable {
         <div class="rb-legend">@for (s of c.series; track $index) { <span><i [style.background]="color($index)"></i>{{ s.name }}</span> }</div>
         <svg [attr.viewBox]="'0 0 ' + W + ' ' + H" role="img" [attr.aria-label]="c.type + ' chart by ' + c.label">
           @for (t of axis(); track $index) {
-            <line [attr.x1]="pl" [attr.x2]="W - pr" [attr.y1]="t.y" [attr.y2]="t.y" stroke="#e7eaee" />
-            <text [attr.x]="pl - 8" [attr.y]="t.y + 4" text-anchor="end" font-size="11" fill="#6c757d">{{ t.l }}</text>
+            <line [attr.x1]="pl" [attr.x2]="W - pr" [attr.y1]="t.y" [attr.y2]="t.y" stroke="#e9eef4" />
+            <text [attr.x]="pl - 8" [attr.y]="t.y + 4" text-anchor="end" font-size="11" fill="#4d5b6e">{{ t.l }}</text>
           }
           @for (x of xlabels(); track $index) {
-            <text [attr.x]="x.x" [attr.y]="H - pb + 16" text-anchor="end" font-size="11" fill="#495057" [attr.transform]="'rotate(-30 ' + x.x + ' ' + (H - pb + 16) + ')'">{{ x.l }}</text>
+            <text [attr.x]="x.x" [attr.y]="H - pb + 16" text-anchor="end" font-size="11" fill="#33485c" [attr.transform]="'rotate(-30 ' + x.x + ' ' + (H - pb + 16) + ')'">{{ x.l }}</text>
           }
           @for (b of bars(); track $index) { <rect [attr.x]="b.x" [attr.y]="b.y" [attr.width]="b.w" [attr.height]="b.h" rx="3" [attr.fill]="b.color"><title>{{ b.title }}</title></rect> }
           @for (l of lines(); track $index) {
@@ -272,7 +284,7 @@ export class RbTable {
             @for (p of l.dots; track $index) { <circle [attr.cx]="p.x" [attr.cy]="p.y" r="3.5" [attr.fill]="l.color"><title>{{ p.title }}</title></circle> }
           }
         </svg>
-        @if (c.capped) { <div class="muted tiny">Showing the first 50 categories. Group or filter the data to reduce them.</div> }
+        @if (c.capped) { <div class="muted tiny">First 50 categories</div> }
       </div>
     }`,
 })

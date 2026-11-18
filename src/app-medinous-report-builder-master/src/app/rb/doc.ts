@@ -1,13 +1,15 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, computed, effect, signal, viewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { DocState, RbStore, Run, snapOf } from './store';
-import { CAT, Clause, MyReport, Notify, Period, Row, Spec, Template, allKeys, buildTable, chartModel, cmp, colOf, distinct, fval, hm, isNum, periodErr, resolveRange, agg } from './engine';
-import { TOPICS, buildR, clauseErr, colOrder, docSentence, groupable, isAmount, isLockSum, isSummary, lockedColD, measLabel, measMap, newClause, rowsForDoc, sumGroups, sumMeasures } from './staff';
+import { CAT, Clause, MyReport, Notify, PRESETS, Period, Row, Spec, Template, allKeys, buildTable, chartModel, cmp, colOf, distinct, fval, hm, isNum, periodErr, resolveRange, agg } from './engine';
+import { TOPICS, buildR, clauseErr, colOrder, docSentence, groupable, isAmount, isLockSum, isSummary, lockedColD, measLabel, measMap, newClause, rowsForDoc, shortPeriod, sumGroups, sumMeasures } from './staff';
 import { CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
-import { RbChart, RbDialog, RbPop, RbTable } from './ui';
+import { RbChart, RbDialog, RbInfo, RbPop, RbTable } from './ui';
+import { RbSideList } from './side-list';
+import { altLetter, overlayOpen } from './viewport';
 import { RbPeriod, ScheduleDialog } from './dialogs';
 import { ShareDialog } from './share-dialog';
 
@@ -16,44 +18,50 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
 /** One report: Settings (period, grouping, filters, live preview) and Results. Nothing runs until Run. */
 @Component({
   selector: 'rb-doc',
-  imports: [FormsModule, DragDropModule, MatIconModule, MatTooltipModule, RbTable, RbChart, RbDialog, RbPop, RbPeriod, ScheduleDialog, ShareDialog],
+  imports: [FormsModule, DragDropModule, MatIconModule, MatTooltipModule, RbTable, RbChart, RbDialog, RbPop, RbPeriod, ScheduleDialog, ShareDialog, RbSideList, RbInfo],
   template: `
     @let d = doc();
     @let t = tpl();
-    <div class="rb-page rb-docpage" [attr.data-rev]="s.rev()">
+    <div class="hub-shell" [attr.data-rev]="s.rev()"><rb-side-list [selected]="d.kind + ':' + d.id" />
+    <div class="hub-main rb-docpage">
       <section class="fx-card rb-doc">
         <div class="rb-qhead">
-          <div class="rb-qcrumb">
+          <div class="rb-qcrumb rb-band">
             <button class="fx-link" (click)="back()"><mat-icon>chevron_left</mat-icon>{{ s.role() === 'admin' ? 'Templates' : 'Reports' }}</button>
-            <span class="muted">/</span>
-            @if (mineRep(); as r) {
-              <button class="fx-icon-btn rb-star" [class.on]="r.fav" (click)="r.fav = !r.fav; s.bump(); s.toast(r.fav ? 'Added to Favourites' : 'Removed from Favourites')" [attr.aria-label]="r.fav ? 'Remove from favourites' : 'Add to favourites'" [attr.aria-pressed]="!!r.fav"><mat-icon>{{ r.fav ? 'star' : 'star_border' }}</mat-icon></button>
-            }
-            <h1 class="rb-qtitle">{{ d.name }}</h1>
-            @if (d.name !== t.title) { <span class="muted tiny">from {{ t.title }}</span> }
-            @if (d.kind === 'rep') { @if (own()) { <span class="rb-tag mute">My version</span> } @else { <span class="rb-tag vio">Shared by {{ d.owner }}</span> } }
-            @else if (s.role() === 'admin') { <span class="rb-pill">Previewing as staff see it</span> }
-            @else { <span class="rb-tag mute">Not saved yet</span> }
+            <span class="rb-band-mark" aria-hidden="true"><mat-icon>{{ summary() ? 'table_rows' : 'description' }}</mat-icon></span>
+            <div class="rb-band-who">
+              <div class="rb-band-row">
+              @if (mineRep(); as r) {
+                <button [matTooltip]="r.fav ? 'Remove from Favourites' : 'Add to Favourites'" class="fx-icon-btn rb-star" [class.on]="r.fav" (click)="r.fav = !r.fav; s.bump(); s.toast(r.fav ? 'Added to Favourites' : 'Removed from Favourites')" [attr.aria-label]="r.fav ? 'Remove from favourites' : 'Add to favourites'" [attr.aria-pressed]="!!r.fav"><mat-icon>{{ r.fav ? 'star' : 'star_border' }}</mat-icon></button>
+              }
+              <h1 #nameEl class="rb-qtitle" [matTooltip]="nameCut() ? d.name : ''">{{ d.name }}</h1>
+              @if (d.kind === 'rep') { @if (own()) { <span class="rb-tag mute">My version</span> } @else { <span matTooltip="Someone else's report. Use Save as (Alt+A) to keep your own changes" class="rb-tag vio">Shared by {{ d.owner }}</span> } }
+              @else if (s.role() === 'admin') { <span class="rb-pill">Previewing as staff see it</span> }
+              @else { <span matTooltip="Save (Alt+S) to keep it in your reports" class="rb-tag status mute">Not saved yet</span> }
+              </div>
+              <div class="rb-band-facts">@if (d.name !== t.title) { <span>from {{ t.title }}</span> }
+                <span>{{ t.module }} · {{ bandPeriod() }}</span></div>
+            </div>
+            <span class="rb-qtools">
+              @if (s.dirty(d)) { <span [matTooltip]="d.kind === 'tpl' || own() ? 'Save (Alt+S) to keep them. Schedules use the saved settings' : 'Use Save as (Alt+A) to keep them in your own copy'" class="rb-tag status run rb-dirty">Unsaved changes</span> }
+              <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="doRun()" title="Run report (Alt+R)" aria-keyshortcuts="Alt+R"><mat-icon>play_arrow</mat-icon><span><u>R</u>un report</span></button>
+              <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="save()" aria-keyshortcuts="Alt+S" [disabled]="d.kind === 'rep' && (!own() || !s.dirty(d))" [matTooltip]="d.kind === 'tpl' ? 'Save to your reports (Alt+S)' : !own() ? 'Only your own reports can be saved. Use Save as' : s.dirty(d) ? 'Save changes (Alt+S)' : 'No changes to save'"><mat-icon>save</mat-icon><span><u>S</u>ave</span></button>
+              <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="openSaveAs()" title="Save as (Alt+A)" aria-keyshortcuts="Alt+A"><mat-icon>add</mat-icon><span>Save <u>a</u>s</span></button>
+              <button matTooltip="Schedule, share, email results link or print" class="fx-icon-btn" (click)="pop.set({ kind: 'more', el: $any($event.currentTarget) })" aria-label="More actions" aria-haspopup="menu"><mat-icon>more_horiz</mat-icon></button>
+            </span>
           </div>
           <div class="rb-qbar">
             <div class="rb-qtabs" role="tablist">
-              <button role="tab" class="rb-tab" [class.on]="tab() === 'settings'" [attr.aria-selected]="tab() === 'settings'" (click)="tab.set('settings')"><mat-icon class="rb-tabi">tune</mat-icon>Settings@if (errs()) { <span class="cnt bad">{{ errs() }}<span class="sr-only"> problems</span></span> }</button>
-              <button role="tab" class="rb-tab" [class.on]="tab() === 'results'" [attr.aria-selected]="tab() === 'results'" (click)="tab.set('results')"><mat-icon class="rb-tabi">table_chart</mat-icon>Results@if (run()) { <span class="cnt">{{ run()!.rows.length }}</span> }</button>
+              <button role="tab" class="rb-tab" [class.on]="tab() === 'settings'" [attr.aria-selected]="tab() === 'settings'" (click)="tab.set('settings')" title="Settings (Alt+T)" aria-keyshortcuts="Alt+T"><mat-icon class="rb-tabi">tune</mat-icon><span>Se<u>t</u>tings</span>@if (errs()) { <span [matTooltip]="errs() + (errs() === 1 ? ' item' : ' items') + ' to fix before you can run'" class="cnt bad">{{ errs() }}<span class="sr-only"> problems</span></span> }</button>
+              <button role="tab" class="rb-tab" [class.on]="tab() === 'results'" [attr.aria-selected]="tab() === 'results'" (click)="tab.set('results')" title="Results (Alt+L)" aria-keyshortcuts="Alt+L"><mat-icon class="rb-tabi">table_chart</mat-icon><span>Resu<u>l</u>ts</span>@if (run()) { <span class="cnt">{{ run()!.rows.length }}</span> }</button>
             </div>
-            <span class="rb-qtools">
-              @if (s.dirty(d)) { <span class="rb-tag run rb-dirty">Unsaved changes</span> }
-              <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="doRun()"><mat-icon>play_arrow</mat-icon>Run report</button>
-              <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="save()" [disabled]="d.kind === 'rep' && (!own() || !s.dirty(d))" [matTooltip]="d.kind === 'tpl' ? 'Save to your reports' : own() ? '' : 'Only your own reports can be saved. Use Save as.'"><mat-icon>save</mat-icon>Save</button>
-              <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="openSaveAs()"><mat-icon>add</mat-icon>Save as</button>
-              <button class="fx-icon-btn" (click)="pop.set({ kind: 'more', el: $any($event.currentTarget) })" aria-label="More actions" aria-haspopup="menu"><mat-icon>more_horiz</mat-icon></button>
-            </span>
           </div>
         </div>
 
         @if (tab() === 'settings') {
           <div class="rb-sbody">
             <div class="rb-sbar">
-              <div class="rb-sbg"><mat-icon>assignment</mat-icon><b>Assigned report</b>
+              <div class="rb-sbg"><mat-icon>assignment</mat-icon><b>Assigned report</b> <rb-info text="The report design this is built on. Switching keeps your period and filters" />
                 @if (d.kind === 'tpl') {
                   <select #tsel class="rb-sel rb-tsel" [value]="d.tid" (change)="askSwitch($any($event.target).value, tsel)" aria-label="Assigned report">
                     @for (g of topics(); track g.name) { <optgroup [label]="g.name">@for (x of g.items; track x.id) { <option [value]="x.id" [selected]="x.id === d.tid">{{ x.title }}{{ lockSum(x) ? ' (totals only)' : '' }}</option> }</optgroup> }
@@ -93,7 +101,7 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                   @let err = c.touched ? clauseErr(c) : '';
                   <div class="rb-fitem" [class.bad]="err">
                     <div class="rb-fih"><b>{{ label(c.field) }}</b>
-                      <button class="fx-icon-btn sm" (click)="removeClause(c)" [attr.aria-label]="'Remove ' + label(c.field) + ' filter'"><mat-icon>close</mat-icon></button></div>
+                      <button [matTooltip]="'Remove ' + label(c.field) + ' filter'" class="fx-icon-btn sm" (click)="removeClause(c)" [attr.aria-label]="'Remove ' + label(c.field) + ' filter'"><mat-icon>close</mat-icon></button></div>
                     @if (amount(c.field)) {
                       <div class="rb-prow">
                         <input class="rb-inp rb-nin" [(ngModel)]="c.from" (ngModelChange)="c.touched = true; s.bump()" inputmode="decimal" placeholder="from" aria-label="From" />
@@ -110,10 +118,9 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                     }
                     @if (err) { <div class="rb-ferr">{{ err }}</div> }
                   </div>
-                } @empty { <p class="muted tiny">No filters. Every {{ s.noun(t).replace(/s$/, '') }} in the period is included.</p> }
-                <button class="fx-btn fx-btn-secondary fx-btn-sm rb-addf" (click)="pop.set({ kind: 'add', el: $any($event.currentTarget) })"><mat-icon>add</mat-icon>Add filter</button>
-                @if (d.clauses.length > 1) { <p class="muted tiny">Several values in one filter means any of them. Different filters must all match.</p> }
-                @if (t.scope.length) { <div class="rb-lockline"><mat-icon>lock</mat-icon>Always limited to {{ s.scopeText(t) }}, set by IT</div> }
+                } @empty { <p class="muted tiny">No filters <rb-info text="Every line in the period is included." /></p> }
+                <div class="rb-addrow"><button class="fx-btn fx-btn-secondary fx-btn-sm rb-addf" (click)="pop.set({ kind: 'add', el: $any($event.currentTarget) })"><mat-icon>add</mat-icon>Add filter</button><rb-info text="Several values in one filter match any of them. Different filters must all match." /></div>
+                @if (t.scope.length) { <div class="rb-lockline"><mat-icon>lock</mat-icon>{{ s.scopeText(t) }} only · set by IT <rb-info text="Your IT team limits this report to these values. You cannot remove it." /></div> }
               </div> }
               </section>
               @if (summary()) {
@@ -125,7 +132,7 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                     <label class="rb-ccol" [matTooltip]="on && figures().length === 1 ? 'At least one figure is needed' : ''">
                       <input type="checkbox" [checked]="on" [disabled]="on && figures().length === 1" (change)="toggleFigure(k)" /><span>{{ figLabel(k) }}</span></label>
                   }
-                  <p class="muted tiny">Each group shows these figures, with subtotals and a grand total.</p>
+                  <p class="muted tiny">Shown per group <rb-info text="Each group shows these figures, with subtotals and a grand total." /></p>
                 </div> }
               </section>
               } @else {
@@ -140,13 +147,13 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                       <label class="rb-ccol" [class.lk]="lr" [matTooltip]="lr"><input type="checkbox" [checked]="!d.hidden.includes(id)" [disabled]="!!lr" (change)="toggleCol(id)" /><span>{{ label(id) }}</span>
                         @if (lr) { <mat-icon class="rb-lockic" [attr.aria-label]="'Locked: ' + lr">lock</mat-icon> }</label>
                       <span class="rb-cmv">
-                        <button class="fx-icon-btn sm" (click)="moveCol(i, -1)" [disabled]="i === 0" [attr.aria-label]="'Move ' + label(id) + ' up'"><mat-icon>arrow_upward</mat-icon></button>
-                        <button class="fx-icon-btn sm" (click)="moveCol(i, 1)" [disabled]="last" [attr.aria-label]="'Move ' + label(id) + ' down'"><mat-icon>arrow_downward</mat-icon></button>
+                        <button [matTooltip]="'Move ' + label(id) + ' left in the table'" class="fx-icon-btn sm" (click)="moveCol(i, -1)" [disabled]="i === 0" [attr.aria-label]="'Move ' + label(id) + ' up'"><mat-icon>arrow_upward</mat-icon></button>
+                        <button [matTooltip]="'Move ' + label(id) + ' right in the table'" class="fx-icon-btn sm" (click)="moveCol(i, 1)" [disabled]="last" [attr.aria-label]="'Move ' + label(id) + ' down'"><mat-icon>arrow_downward</mat-icon></button>
                       </span>
                     </div>
                   }
                 </div>
-                <p class="muted tiny">Drag or use the arrows to change the order. You can hide columns, not add new ones.@if (d.order) { <button class="fx-link tiny" (click)="d.order = null; s.bump()">Reset order</button> }</p>
+                <p class="muted tiny">Drag to reorder <rb-info text="You can hide and reorder columns, not add new ones. IT adds columns to the template." />@if (d.order) { <button class="fx-link tiny" (click)="d.order = null; s.bump()">Reset order</button> }</p>
                 <div class="rb-sortbox">
                   @for (i of [0, 1, 2]; track i) {
                     @if (i === 0 || d.sorts[i - 1]) {
@@ -184,10 +191,9 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
               </aside>
               }
               <div class="rb-scol-main">
-                <div class="rb-sentence"><mat-icon>visibility</mat-icon><span>{{ sentence() }}</span></div>
                 <section class="rb-spanel">
-                  <div class="rb-sph"><mat-icon>science</mat-icon><b>Sample only</b><span class="muted tiny">{{ summary() ? 'Summary report: the first 10 groups with these settings, one row each. Run report for every group, subtotals and the grand total.' : 'The first 10 lines with these settings, before grouping and totals. Run report for every line and the totals.' }}</span>
-                    <button class="fx-btn fx-btn-primary fx-btn-sm rb-sph-r" (click)="doRun()"><mat-icon>play_arrow</mat-icon>Run report</button></div>
+                  <div class="rb-sph"><mat-icon>science</mat-icon><b>Sample only</b><span class="muted tiny">{{ summary() ? 'First 10 groups' : 'First 10 lines' }}</span><rb-info [text]="sampleInfo()" />
+                    <button class="fx-btn fx-btn-secondary fx-btn-sm rb-sph-r" (click)="doRun()" [matTooltip]="(summary() ? 'Every group' : 'Every line') + ', with subtotals and the grand total'"><mat-icon>play_arrow</mat-icon>Run report</button></div>
                   @if (periodErr(d.period)) { <div class="rb-pvempty"><mat-icon>event_busy</mat-icon>Choose a valid period to see a preview.</div> }
                   @else if (summary()) {
                     @if (sumSample(); as sm) {
@@ -202,38 +208,41 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                             @for (v of row.vals; track $index) { <td class="n">{{ v }}</td> }
                           </tr> }
                         </tbody></table></div>
-                        <p class="muted tiny rb-pvnote">{{ sm.total.toLocaleString() }} {{ sm.total === 1 ? 'group' : 'groups' }} in this period.@if (sm.total > 10) { Showing the first 10.}</p>
+                        <p class="muted tiny rb-pvnote">{{ sm.total.toLocaleString() }} {{ sm.total === 1 ? 'group' : 'groups' }}</p>
                       }
                     }
                   }
                   @else if (!preview().length) { <div class="rb-pvempty"><mat-icon>search_off</mat-icon>No lines match this period@if (d.clauses.length) { and these filters}.</div> }
                   @else {
                     <div class="rb-pvwrap"><table class="rb-pvt"><thead><tr>@for (c of visibleCols(); track c) {
-                      <th [class.n]="num(c)" [attr.aria-sort]="sortDir(c)"><button class="rb-pvsort" (click)="headSort(c)" [matTooltip]="'Sort by ' + label(c)">{{ label(c) }}@if (sortDir(c)) { <mat-icon class="xs">{{ sortDir(c) === 'ascending' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon> }</button></th> }</tr></thead>
+                      <th [class.n]="num(c)" [attr.aria-sort]="sortDir(c)"><button class="rb-pvsort" (click)="headSort(c)" [matTooltip]="sortDir(c) === 'ascending' ? 'Sort ' + label(c) + ' the other way' : sortDir(c) === 'descending' ? 'Stop sorting by ' + label(c) : 'Sort by ' + label(c)">{{ label(c) }}@if (sortDir(c)) { <mat-icon class="xs">{{ sortDir(c) === 'ascending' ? 'arrow_upward' : 'arrow_downward' }}</mat-icon> }</button></th> }</tr></thead>
                       <tbody>@for (r of preview(); track r._i) { <tr>@for (c of visibleCols(); track c) { <td [class.n]="num(c)">{{ txt(c, r[c]) }}</td> }</tr> }</tbody></table></div>
                   }
                 </section>
               </div>
             </div>
           </div>
-        } @else {
+        } @else { <div class="rb-resbody">
           @if (job(); as j) {
             @if (secs() < 5) { <div class="rb-empty"><span class="rb-spin" aria-hidden="true"></span><b>Running</b>{{ secs() }} s</div> }
             @else {
-              <div class="rb-empty narrow"><mat-icon class="big">schedule</mat-icon><b>This is taking longer than usual</b>It keeps running in the background, even if you open another report. When it's ready you'll see it under the bell at the top.
+              <div class="rb-empty narrow"><mat-icon class="big">schedule</mat-icon><b>Taking longer than usual</b>It keeps running. You'll get a notification.
                 <label class="fx-check inline tiny rb-emailme"><input type="checkbox" [checked]="notify() === 'email'" (change)="notify.set($any($event.target).checked ? 'email' : 'app'); s.toast($any($event.target).checked ? 'We will also email you a link when it is ready' : 'You will be notified in the app only')" />Also email me a link when it's ready</label>
-                <div class="rb-btnrow center"><button class="fx-btn fx-btn-secondary" (click)="back()">Go to my reports</button><button class="fx-btn fx-btn-secondary" (click)="s.cancel(d); tab.set('settings')">Cancel</button></div>
+                <div class="rb-btnrow center"><button class="fx-btn fx-btn-secondary" (click)="back()">Go to my reports</button><button matTooltip="Stop this run and go back to Settings" class="fx-btn fx-btn-secondary" (click)="s.cancel(d); tab.set('settings')">Cancel</button></div>
                 <div class="muted tiny">Running for {{ secs() }} s</div></div>
             }
           } @else if (run(); as lr) {
             <div class="rb-rmeta">
+              <!-- The period first, as the line people check; the rest of the criteria sit behind the (i). No Change link: Settings is the tab beside (Shrunkal, 17 Nov). -->
+              @let rs = lr.parts;
+              <!-- One line: the period first (what people check), the run time after it, quieter -->
+              <div class="rb-resdates"><mat-icon>calendar_today</mat-icon><b>{{ rs.dates }}</b>@if (rs.rest) { <rb-info [text]="rs.rest" /> }
+                <span class="rb-runmeta">Run {{ hm(lr.at) }} · kept until {{ hm(lr.until) }} <rb-info text="Run again with the same settings before then to see this result instantly" /></span></div>
               <div class="rb-kpis">@for (k of kpis(); track k[1]) { <span class="rb-kpi"><b>{{ k[0] }}</b> {{ k[1] }}</span> }</div>
-              <div class="muted tiny">{{ lr.sentence.replace('dated ', 'Dated ') }} <button class="fx-link tiny" (click)="tab.set('settings')">Change</button></div>
-              <div class="muted tiny">Run at {{ hm(lr.at) }}. Results kept until {{ hm(lr.until) }}.</div>
             </div>
             @if (changed()) {
               <div class="fx-outdated rb-res-stale"><mat-icon>warning</mat-icon><span>The settings have changed since this run. These results are from {{ hm(lr.at) }}.</span>
-                <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="doRun()"><mat-icon>play_arrow</mat-icon>Run again</button></div>
+                <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="doRun()"><mat-icon>play_arrow</mat-icon>Run again</button></div>
             }
             <div class="rb-vbar">
               <label class="fx-search rb-find"><mat-icon>search</mat-icon><input [ngModel]="find()" (ngModelChange)="find.set($event); page.set(0)" placeholder="Find in results" aria-label="Find in results" /></label>
@@ -241,24 +250,24 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
                 <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="toggleAll()"><mat-icon>{{ collapsed().length ? 'unfold_more' : 'unfold_less' }}</mat-icon>{{ collapsed().length ? 'Expand all' : 'Collapse all' }}</button>
               }
               <span class="rb-vbar-r rb-dlbar"><span class="muted tiny">Download</span>
-                @for (f of downloads; track f[0]) { <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="download(f[0])"><mat-icon>{{ f[1] }}</mat-icon>{{ f[2] }}</button> }</span>
+                @for (f of downloads; track f[0]) { <button [matTooltip]="tpl().heavy ? 'Large report: prepared in the background, you get notified' : 'Every line of this run, not just this page'" class="fx-btn fx-btn-secondary fx-btn-sm" (click)="download(f[0])"><mat-icon>{{ f[1] }}</mat-icon>{{ f[2] }}</button> }</span>
             </div>
             @if (selectable() && sel().size) {
               <div class="rb-selbar"><b>{{ sel().size }} selected</b><span class="muted tiny">{{ selInv() }} {{ selInv() === 1 ? 'invoice' : 'invoices' }}</span>
                 @for (a of actions(); track a.id) { <button class="fx-btn fx-btn-secondary fx-btn-sm" [disabled]="a.single && selInv() !== 1" [matTooltip]="a.single && selInv() !== 1 ? 'Select lines from one invoice' : ''" (click)="s.toast(a.label + ': ' + sel().size + ' selected'); sel.set(newSet())">{{ a.label }}</button> }
                 <button class="fx-link tiny" (click)="sel.set(newSet())">Clear</button></div>
-            }
+            } @else if (selectable() && actions().length) { <p class="muted tiny rb-selhint">Click lines to select them, then choose an action</p> }
             @if (!stab() && lr.R.display.mode !== 'table') { <rb-chart [model]="chart()" /> }
             <rb-table [model]="table()" [spec]="spec()" [total]="rows().length" [sort]="sort() ? [sort()!] : spec().sorts" [pins]="stab() || summary() ? [] : t.pins" [labels]="sumLabels()" [widths]="d.widths || {}" (resized)="setWidth($event.id, $event.w)"
                       [find]="find()" [selected]="selectable() ? sel() : null" (toggle)="toggleGroup($event)" (page)="page.set(page() + $event)"
                       (rowClick)="toggleSel($event)" (drill)="drill($event)" (headerMenu)="pop.set({ kind: 'header', el: $event.el, col: $event.id })" />
           } @else {
-            <div class="rb-empty"><mat-icon class="big">play_circle</mat-icon><b>No results yet</b>Check the settings, then click Run.
-              <div class="rb-btnrow center"><button class="fx-btn fx-btn-primary" (click)="doRun()"><mat-icon>play_arrow</mat-icon>Run</button></div></div>
+            <div class="rb-empty"><mat-icon class="big">play_circle</mat-icon><b>No results yet</b>
+              <div class="rb-btnrow center"><button class="fx-btn fx-btn-secondary" (click)="doRun()"><mat-icon>play_arrow</mat-icon>Run</button></div></div>
           }
-        }
+        </div> }
       </section>
-    </div>
+    </div></div>
 
 
     @if (pop(); as p) {
@@ -305,7 +314,7 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
 
     @if (saveAsOpen()) {
       <rb-dialog title="Save as my version" (closed)="saveAsOpen.set(false)">
-        <p class="muted tiny">Keeps the period, filters, grouping, columns and sort. Relative periods stay relative. Only you see it unless you share it.</p>
+        <p class="muted tiny">Only you see it until you share it. <rb-info text="Keeps the period, filters, grouping, columns and sort. Relative periods such as Last 30 days stay relative." /></p>
         <input class="rb-inp full tall" [(ngModel)]="saveName" aria-label="Name" />
         @if (saveErr()) { <div class="rb-ferr">{{ saveErr() }}</div> }
         <ng-container foot><button class="fx-btn fx-btn-secondary" (click)="saveAsOpen.set(false)">Cancel</button><button class="fx-btn fx-btn-primary" (click)="saveAs()">Save</button></ng-container>
@@ -313,13 +322,13 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
     }
     @if (switchTo(); as sw) {
       <rb-dialog title="Switch assigned report?" (closed)="cancelSwitch()">
-        <p class="muted tiny">Switching to {{ s.tpl(sw.tid).title }} resets your column choices, sort and grouping. The period and filters are kept.</p>
+        <p class="muted tiny">Columns, sort and grouping reset. Period and filters stay.</p>
         <ng-container foot><button class="fx-btn fx-btn-secondary" (click)="cancelSwitch()">Keep current report</button><button class="fx-btn fx-btn-primary" (click)="switchTemplate(sw.tid)">Switch</button></ng-container>
       </rb-dialog>
     }
     @if (leaving()) {
       <rb-dialog [title]="'Save changes to ' + d.name + '?'" (closed)="answerLeave('cancel')">
-        <p class="muted tiny">{{ d.kind === 'tpl' ? 'This report has not been saved. If you leave, its settings are lost.' : 'You changed the period, filters, columns or grouping. If you leave without saving, those changes are lost.' }}</p>
+        <p class="muted tiny">{{ d.kind === 'tpl' ? 'Not saved. Its settings will be lost.' : 'Your changes will be lost.' }}</p>
         <ng-container foot>
           <button class="fx-btn fx-btn-secondary" (click)="answerLeave('cancel')">Cancel</button>
           <button class="fx-btn fx-btn-secondary" (click)="answerLeave('discard')">Don't save</button>
@@ -330,8 +339,25 @@ type Pop = { kind: 'more' | 'add' | 'vals' | 'header'; el: HTMLElement; clause?:
     @if (scheduling(); as r) { <rb-schedule [report]="r" (closed)="scheduling.set(null)" /> }
     @if (sharing(); as r) { <rb-share [report]="r" (closed)="sharing.set(null)" /> }`,
 })
-export class RbDoc {
+export class RbDoc implements OnDestroy {
+  /** The band name is one line; when it is cut, hovering shows it whole. Measured, so a short name gets no tooltip. */
+  nameEl = viewChild<ElementRef<HTMLElement>>('nameEl');
+  nameCut = signal(false);
+  private nameRo = new ResizeObserver(() => this.measureName());
+  private measureName() { const el = this.nameEl()?.nativeElement; this.nameCut.set(!!el && el.scrollWidth > el.clientWidth + 1); }
+  private nameWatch = effect(() => { const el = this.nameEl()?.nativeElement; this.s.rev(); this.nameRo.disconnect(); if (el) { this.nameRo.observe(el); queueMicrotask(() => this.measureName()); } });
+  ngOnDestroy() { this.nameRo.disconnect(); }
   hm = hm; periodErr = periodErr; clauseErr = clauseErr;
+  /** Alt+R run, Alt+T Settings, Alt+L Results, Alt+S save, Alt+A save as: the letters underlined on those controls. */
+  @HostListener('document:keydown', ['$event']) onKey(e: KeyboardEvent) {
+    const k = altLetter(e); if (!k || overlayOpen()) return;
+    const d = this.doc();
+    const act: Record<string, () => void> = {
+      r: () => this.doRun(), t: () => this.tab.set('settings'), l: () => this.tab.set('results'), a: () => this.openSaveAs(),
+      s: () => { if (!(d.kind === 'rep' && (!this.own() || !this.s.dirty(d)))) this.save(); },
+    };
+    if (act[k]) { e.preventDefault(); act[k](); }
+  }
   groupable = groupable();
   sortLabels = ['Sort by', 'Then by', 'And finally'];
   groupLabels = ['Group by', 'Then group by', 'And then by'];
@@ -354,6 +380,8 @@ export class RbDoc {
   sharing = signal<MyReport | null>(null);
 
   constructor(public s: RbStore, private router: Router, route: ActivatedRoute) {
+    // Registration's rule: something opened on a window under 1200px folds the list to its rail
+    if (innerWidth < 1200) s.listFolded.set(true);
     route.paramMap.subscribe((p) => {
       const kind = p.get('kind') as 'tpl' | 'rep', id = p.get('id')!;
       const d = s.doc(kind, id); this.key.set(s.keyOf(d));
@@ -369,6 +397,8 @@ export class RbDoc {
   doc = computed<DocState>(() => { this.s.rev(); const [k, id] = this.key().split(':'); return this.s.doc(k as 'tpl' | 'rep', id); });
   tpl = computed<Template>(() => this.s.tpl(this.doc().tid));
   own = computed(() => { const d = this.doc(); return d.kind === 'rep' && d.owner === 'me'; });
+  /** The band's facts line: the period in a few words, as the patient band carries ID and age. */
+  bandPeriod() { return shortPeriod(this.doc().period, PRESETS); }
   mineRep = computed(() => { this.s.rev(); const d = this.doc(); return d.kind === 'rep' ? this.s.rep(d.id) || null : null; });
   errs = computed(() => { this.s.rev(); return this.s.errors(this.doc()); });
   run = computed<Run | undefined>(() => { this.s.rev(); return this.s.runs[this.key()]; });
@@ -377,6 +407,10 @@ export class RbDoc {
   changed = computed(() => { this.s.rev(); const r = this.run(); return !!r && snapOf(this.doc()) !== r.snap; });
   rangeKind = computed(() => { this.s.rev(); return resolveRange(this.doc().period)?.kind || ''; });
   groupsChanged = computed(() => { this.s.rev(); return JSON.stringify(this.doc().groups) !== JSON.stringify(this.tpl().groups.slice(0, 2)); });
+  /** The (i) beside "Sample only": what the report covers, then what the sample is. */
+  sampleInfo = computed(() => this.sentence().replace(/\.+$/, '') + '. ' + (this.summary()
+    ? 'This sample is the first 10 groups. Run report for all of them, with totals.'
+    : 'This sample is the first 10 lines, before totals. Run report for every line.'));
   sentence = computed(() => { this.s.rev(); return docSentence(this.tpl(), this.doc(), this.s.noun(this.tpl())); });
   order = computed(() => { this.s.rev(); return colOrder(this.tpl(), this.doc()); });
   visibleCols = computed(() => this.order().filter((c) => !this.doc().hidden.includes(c)));

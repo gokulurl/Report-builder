@@ -1,7 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { CalcCol, DATASETS, Filter, MyReport, Notify, Row, Spec, Template, TODAY, colOf, periodDays, periodErr, rangeText } from './engine';
-import { Doc, buildR, clauseErr, docSentence, evalAll, fromConds } from './staff';
+import { Doc, buildR, clauseErr, docParts, docSentence, evalAll, fromConds } from './staff';
 import { rowsFor } from './engine';
 
 export type Role = 'admin' | 'user';
@@ -11,7 +11,7 @@ export interface Note { id: number; text: string; key: string; at: Date; read: b
 export interface Folder { id: string; name: string }
 /** The open report's working copy. Saved reports keep their own values until Save. */
 export interface DocState extends Doc { kind: 'tpl' | 'rep'; id: string; tid: string; name: string; owner: string; saved: string; savedW?: string }
-export interface Run { R: Spec; rows: Row[]; snap: string; at: Date; until: Date; ms: number; sentence: string }
+export interface Run { R: Spec; rows: Row[]; snap: string; at: Date; until: Date; ms: number; sentence: string; parts: { dates: string; rest: string } }
 export interface Job { t0: number; name: string; snap: string }
 
 const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o), (k, v) => (typeof v === 'string' && /^\d{4}-\d\d-\d\dT/.test(v) ? new Date(v) : v));
@@ -33,6 +33,11 @@ const T_ = (o: Partial<Template>): Template => Object.assign(TBASE(), o);
 export class RbStore {
   /** Bumped on every change; screens read it so they redraw (the data itself is plain objects). */
   readonly rev = signal(0);
+  /** The side list folded to its rail; shared by every screen, as Registration's is. */
+  readonly listFolded = signal(false);
+  /** The side list's filter and folder (a built list), kept across screens as Registration's list keeps them. */
+  readonly listFilter = signal('');
+  readonly listQuery = signal('');
   readonly role = signal<Role>((sessionStorage.getItem('rb-role') as Role) || 'user');
   readonly toastMsg = signal<{ text: string; open?: string; bad?: boolean } | null>(null);
   private toastTimer: any;
@@ -43,7 +48,7 @@ export class RbStore {
       rules: [{ id: ruid++, col: 'net', op: 'gt', a: '500', sw: 'gbg', applies: 'summary' }],
       summaries: [{ id: 's1', name: 'By doctor', groups: ['doc'], sums: { inv: 'countd', net: 'sum' } }, { id: 's2', name: 'By department', groups: ['dept'], sums: { inv: 'countd', qty: 'sum', net: 'sum' } }] }),
     T_({ id: 't2', title: 'Revenue by department', desc: 'One line per department, with a chart. Click a department to see its lines', cols: ['dept', 'inv', 'net'], groups: ['dept'], sums: { inv: 'countd', net: 'sum' }, show: { detail: false, sub: true, grand: true },
-      display: { mode: 'both', type: 'bar', label: 'dept', values: ['net'], orient: 'portrait' }, drill: [{ col: 'dept', target: 't7' }], places: ['Billing', 'Administration'] }),
+      display: { mode: 'both', type: 'bar', label: 'dept', values: ['net'], orient: 'portrait' }, drill: [{ col: 'dept', target: 't7' }], places: ['Billing', 'Application Setup'] }),
     T_({ id: 't3', title: 'Pharmacy sales by item', desc: 'Quantity and value of each item dispensed', cols: ['inv', 'date', 'pname', 'qty', 'net'], groups: ['svc'], sums: { qty: 'sum', net: 'sum' }, start: 'collapsed',
       display: { mode: 'both', type: 'doughnut', label: 'svc', values: ['net'], orient: 'portrait' }, scope: [FX('rtype', ['Pharmacy'])] }),
     T_({ id: 't4', title: 'Discounts given by sponsor', desc: 'Gross, discount and discount rate per insurance sponsor', cols: ['inv', 'svc', 'gross', 'disc', 'k1'], groups: ['sponsor'], sums: { gross: 'sum', disc: 'sum', k1: 'sum' }, start: 'collapsed',
@@ -62,8 +67,8 @@ export class RbStore {
   ];
   folders: Folder[] = [{ id: 'fd', name: 'Daily checks' }, { id: 'fm', name: 'Month end' }];
   scheds: Schedule[] = [
-    { id: this.schid++, src: 'm1', freq: 'Working days (Sun to Thu)', time: '07:30', deliver: ['Dashboard', 'In-app notification'], fmt: 'Excel', on: true, last: { at: new Date(2026, 9, 6, 7, 30), ok: true } },
-    { id: this.schid++, src: 'm3', freq: 'First day of the month', time: '06:00', deliver: ['Dashboard', 'Email link'], fmt: 'PDF', on: true, last: { at: new Date(2026, 9, 1, 6, 0), ok: false } },
+    { id: this.schid++, src: 'm1', freq: 'Working days (Sun to Thu)', time: '07:30', deliver: ['Scheduled list', 'In-app notification'], fmt: 'Excel', on: true, last: { at: new Date(2026, 9, 6, 7, 30), ok: true } },
+    { id: this.schid++, src: 'm3', freq: 'First day of the month', time: '06:00', deliver: ['Scheduled list', 'Email link'], fmt: 'PDF', on: true, last: { at: new Date(2026, 9, 1, 6, 0), ok: false } },
   ];
   notes: Note[] = [];
   /** Last finished run and any running job, per report key, so a run survives leaving the page. */
@@ -137,7 +142,7 @@ export class RbStore {
       const R = buildR(t, d);
       const rows = rowsFor(R).filter((r) => evalAll(d.clauses, r));
       if (d.kind === 'rep') { const rr = this.rep(d.id); if (rr) { rr.lastRun = new Date(); rr.lastLines = rows.length; } }
-      this.runs[key] = { R, rows, snap, at: new Date(), until: new Date(Date.now() + t.expiry * 60000), ms: (Date.now() - job.t0) / 1000, sentence: docSentence(t, d, this.noun(t)).replace(/^Shows \S+ \S+ /, '') };
+      this.runs[key] = { R, rows, snap, at: new Date(), until: new Date(Date.now() + t.expiry * 60000), ms: (Date.now() - job.t0) / 1000, sentence: docSentence(t, d, this.noun(t)).replace(/^Shows .*? dated /, 'dated '), parts: docParts(t, d) };
       delete this.jobs[key];
       const here = this.router.url.startsWith(`/report/${d.kind}/${d.id}`);
       if (dur > 5000 || notify !== 'none' || !here) {

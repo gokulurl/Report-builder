@@ -1,0 +1,989 @@
+// New UI: the Registration v2 design (medinous-registration-v2), applied over the Report Builder.
+// Tokens and fonts are copied from v2 (styles/_v2-tokens, _v2-fonts). Loaded last from styles.scss;
+// swap `@use 'new-ui'` back to `@use 'product-skin'` to return to the Fusion product look.
+@use 'styles/v2-tokens';
+// Gilroy is off for now (17 Nov 2026): DM Sans only in the new UI. Restore this line to bring it back.
+// @use 'styles/v2-fonts';
+@use 'styles/hero-icons';
+
+/* ---------- 1. The old Fusion tokens, pointed at the v2 ones ---------- */
+html:root {
+  --topbar: 56px;
+  --blue: var(--color-science);
+  --blue-dark: var(--blue-600);
+  --orange: var(--color-blaze);
+  --page: var(--level-ground);
+  --band: var(--slate-25);
+  --strip: var(--blue-50);
+  --dd: var(--blue-50);
+  --ink: var(--color-midnight);
+  --ink2: var(--slate-700);
+  --ink3: var(--slate-600);
+  --line: var(--slate-200);
+  --field: var(--slate-300);
+  --danger: #d92d20;
+  --danger-bg: #fdeceb;
+  --warn: var(--warning-ink);
+  --warn-bg: var(--warning-bg);
+  --mat-sys-surface: var(--level-ground);
+}
+
+.page-host > :not(router-outlet) { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+body { font-family: var(--font-ui); font-size: var(--text-base); color: var(--text-primary); background: var(--level-ground); }
+h1, h2, h3, .rb-ctitle, .rb-qtitle, .rb-pvh, .rb-lhead h2 { font-family: var(--font-display); color: var(--color-midnight); letter-spacing: var(--tracking-tight); }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* Icons: Material Symbols at a light weight, close to v2's outline Heroicons */
+.mat-icon, .material-icons {
+  font-family: 'Material Symbols Outlined' !important;
+  font-weight: normal; font-style: normal; letter-spacing: normal; text-transform: none;
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+  -webkit-font-feature-settings: 'liga'; font-feature-settings: 'liga';
+}
+
+/* ---------- 2. Controls ---------- */
+select, .rb-sel, .rb-inp, .rb-ta,
+input:not([type='checkbox']):not([type='radio']):not([type='color']), textarea {
+  height: 38px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  font-family: var(--font-ui); font-size: var(--text-sm); color: var(--text-primary); padding: 0 10px;
+  &:hover:not(:disabled):not(:focus) { border-color: var(--slate-400); }
+  &:focus { outline: 0; border-color: var(--color-science); box-shadow: 0 0 0 3px var(--blue-100); }
+  &:disabled { background: var(--slate-50); color: var(--text-muted); }
+}
+textarea, .rb-ta { height: auto; padding: 8px 10px; }
+/* The builder's title is text you can click into, not a form field: the global rule above outranks it, so restate it */
+.rb-btop input.rb-title-in.rb-title-in {
+  height: 40px; border: 1px solid transparent; background: transparent; box-shadow: none;
+  font-family: var(--font-display); font-size: var(--text-xl); font-weight: 700; color: var(--color-midnight);
+  letter-spacing: var(--tracking-tight); padding: 0 8px;
+  &:hover { border-color: var(--border); }
+  &:focus { border-color: var(--color-science); background: #fff; box-shadow: 0 0 0 3px var(--blue-100); }
+  &.bad { border-color: var(--danger); }
+}
+.rb-sel.xs, .rb-inp.xs { height: 30px; font-size: var(--text-xs); }
+.rb-ruleform .fx-btn, .rb-ruleform .rb-sel, .rb-ruleform .rb-inp { height: 38px; }
+input[type='checkbox'], input[type='radio'] { accent-color: var(--color-science); width: 16px; height: 16px; }
+.rb-cbx { width: 16px; height: 16px; border-radius: 4px; border-color: var(--slate-400); &.on { background: var(--color-science); border-color: var(--color-science); } }
+.fx-search, .rb-lsearch, .rb-hsearch, .rb-find {
+  height: 38px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: #fff; padding: 0 10px; gap: 8px;
+  mat-icon { color: var(--text-secondary); }
+  input { height: 34px !important; font-size: var(--text-sm); }
+  &:focus-within { border-color: var(--color-science); box-shadow: 0 0 0 3px var(--blue-100); }
+}
+
+/* Buttons: primary solid blue, secondary white with a grey edge, ghost = v2's quiet button */
+.fx-btn {
+  height: 38px; padding: 0 14px; border-radius: var(--radius-sm); font-family: var(--font-ui);
+  font-size: var(--text-sm); font-weight: 600; text-transform: none; gap: 6px;
+  mat-icon { font-size: 19px; width: 19px; height: 19px; }
+  &:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+}
+.fx-btn.fx-btn-sm { height: 32px; padding: 0 10px; font-size: var(--text-sm); }
+.fx-btn-primary { background: var(--color-science); border-color: var(--color-science); color: #fff;
+  &:hover:not(:disabled) { background: var(--blue-600); border-color: var(--blue-600); } }
+.fx-btn-secondary { background: var(--bg-surface); border-color: var(--border-strong); color: var(--text-primary);
+  mat-icon { color: var(--text-secondary); }
+  &:hover:not(:disabled) { background: var(--bg-subtle); border-color: var(--slate-400); color: var(--color-midnight); } }
+.fx-btn-ghost { color: var(--color-science); &:hover:not(:disabled) { background: var(--blue-50); } }
+.fx-btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+.fx-btn.rb-split-arrow { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.rb-split .fx-btn:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.fx-icon-btn { width: 32px; height: 32px; border-radius: var(--radius-sm); color: var(--text-secondary);
+  &:hover { background: var(--slate-100); color: var(--text-primary); } }
+.fx-link { color: var(--color-science); font-size: var(--text-sm); font-weight: 600; text-decoration: none;
+  &:hover:not(:disabled) { text-decoration: none; color: var(--blue-700); } }
+.rb-addb { border-color: var(--border-strong); border-radius: var(--radius-sm); &:hover { background: var(--blue-50); } }
+
+/* Segmented control, as v2's .seg */
+.fx-seg { border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  button { height: 36px; padding: 0 14px; font-size: var(--text-sm); color: var(--slate-700); border-inline-end-color: var(--border);
+    &:hover { background: var(--slate-50); }
+    &.on { background: var(--color-science); color: #fff; font-weight: 700; } }
+  &.sm button { height: 30px; padding: 0 10px; } }
+.fx-switch .fx-switch-track { background: var(--slate-300); }
+.fx-check { font-size: var(--text-sm); color: var(--text-primary); }
+
+/* ---------- 3. Surfaces: cards lifted, not fenced ---------- */
+.rb-page { padding: 24px 28px; gap: 20px; }
+.rb-dhead h1 { font-size: var(--text-2xl); font-weight: 700; }
+.rb-dhead p { font-size: var(--text-base); color: var(--text-secondary); margin-top: 4px; }
+.fx-card, .fx-panel, .fx-section, .fx-results, .fx-lib {
+  background: var(--level-raised); border: none !important; border-radius: var(--radius-card); box-shadow: var(--shadow-card);
+}
+.fx-card { overflow: hidden; }
+.rb-spanel, .rb-spane { border: 1px solid var(--rule); border-radius: var(--radius-md); background: #fff; }
+.rb-sbar, .rb-hlf { border: none; border-radius: var(--radius-md); background: var(--slate-50); }
+.rb-fitem, .rb-fcard, .rb-item, .rb-mrow, .rb-rsec, .rb-vopt, .rb-rchip, .rb-hlsw-b { border-color: var(--border); border-radius: var(--radius-md); }
+.rb-vopt.on { border-color: var(--color-science); background: var(--blue-50); }
+.rb-rchip.on { border-color: var(--color-science); background: var(--blue-50); color: var(--color-science); font-weight: 600; }
+.rb-sentence, .fx-notice, .rb-reuse, .rb-selbar { background: var(--blue-50); border-color: var(--blue-100); border-radius: var(--radius-md); color: var(--color-midnight); }
+.fx-outdated, .fx-bgrun { border-radius: var(--radius-md); border-color: #f2d19a; }
+.rb-psh, .rb-spaneh { background: #fff; b { font-family: var(--font-display); font-weight: 700; color: var(--color-midnight); } }
+.rb-spaneh { border-bottom-color: var(--rule); }
+.rb-psh:hover { background: var(--slate-50); }
+.rb-psec { border-bottom-color: var(--rule); }
+.rb-psec.open .rb-psh { background: var(--slate-25); }
+.rb-psi, .rb-vtab mat-icon, .rb-rlab mat-icon { color: var(--color-science); }
+.rb-spane.closed { background: var(--slate-25); }
+.rb-vtab:hover { background: var(--blue-50); }
+
+/* ---------- 4. Tabs, as v2's stage strip ---------- */
+.rb-htabs, .rb-qtabs, .rb-tabs { border-bottom: 1px solid var(--border); }
+.rb-qhead { border-bottom: 1px solid var(--rule); }
+.rb-htab, .rb-tab {
+  height: 46px; padding: 0 16px; font-size: var(--text-base); color: var(--text-secondary); font-weight: 400;
+  border-bottom: 3px solid transparent;
+  &:hover:not(.on) { color: var(--text-primary); background: var(--bg-subtle); }
+  &.on { color: var(--color-science); font-weight: 700; border-bottom-color: var(--color-science);
+    background: linear-gradient(to bottom, transparent 35%, var(--blue-50) 100%); }
+}
+.rb-tabs .rb-tab { padding: 0 7px; font-size: var(--text-sm); height: 42px; gap: 4px; }
+.cnt { font-size: var(--text-2xs); font-weight: 700; background: var(--slate-100); color: var(--text-secondary); border-radius: var(--radius-pill); padding: 2px 7px; line-height: 14px; }
+.rb-htab.on .cnt, .rb-tab.on .cnt { background: var(--color-science); color: #fff; }
+.cnt.bad { background: var(--danger-bg); color: var(--danger-ink); }
+
+/* ---------- 5. Tables ---------- */
+.rb-tw, .rb-pvwrap, .fx-grid-wrap { border: 1px solid var(--rule); border-radius: var(--radius-md); }
+table.rb-t, table.rb-pvt, table.rb-lt, table.fx-grid { font-size: var(--text-sm); }
+table.rb-t th, table.rb-pvt th, table.rb-lt th, table.fx-grid th {
+  background: var(--bg-subtle); color: var(--slate-700); font-size: var(--text-xs); font-weight: 600;
+  letter-spacing: var(--tracking-wide); border-bottom: 1px solid var(--border);
+}
+table.rb-t th { border-inline-end: 1px solid var(--rule); }
+table.rb-lt th { padding: 10px 12px; }
+table.rb-t td, table.rb-pvt td, table.fx-grid td { color: var(--text-primary); border-bottom: 1px solid var(--rule); }
+table.rb-t td { border-inline-end: 1px solid var(--slate-50); padding: 8px 12px; }
+table.rb-lt td { padding: 11px 12px; border-bottom: 1px solid var(--rule); }
+/* Results: the table takes what the taller v2 header leaves, so only the table scrolls (measured at 1440x900) */
+.rb-docpage .rb-doc > rb-table .rb-tw { height: max(300px, calc(100vh - 390px)); }
+/* Row actions stay on one line: Run, View/Edit and ⋯ need 252px with the wider cell padding */
+.rb-lact { white-space: nowrap; }
+.rb-lmain table.rb-lt col.c-act2 { width: 256px; }
+@media (max-width: 1199.98px) { .rb-lmain table.rb-lt col.c-act2 { width: 188px; } }
+.rb-th { font-weight: 600; color: var(--slate-700); padding: 9px 12px; &:hover { background: var(--slate-100); } }
+table.rb-t tr.selectable:hover td, table.rb-lt tr.rb-rowlink:hover td, .rb-lrow:hover td { background: var(--blue-50); }
+table.rb-lt tr.rb-rowlink:hover td:first-child { box-shadow: inset 3px 0 0 var(--color-science); }
+table.rb-t {
+  tr.gh td { background: var(--slate-50); color: var(--color-midnight); font-weight: 600; }
+  tr.gh:hover td { background: var(--slate-100); }
+  tr.srow td, tr.sub td { background: var(--slate-25); color: var(--color-midnight); font-weight: 600; }
+  tr.gt td { background: var(--blue-50); color: var(--color-midnight); font-weight: 700; border-top: 2px solid var(--blue-200); }
+  tr.rsel td { background: var(--blue-100); }
+  .gcol { background: var(--slate-25); }
+}
+.rb-ltitle, .rb-rt { font-weight: 600; color: var(--color-midnight); &:hover { color: var(--color-science); text-decoration: none; } }
+.rb-lnk, td.drillable { color: var(--color-science); text-decoration: none; font-weight: 600; &:hover { text-decoration: underline; } }
+.rb-rz:hover { background: var(--blue-200); }
+
+/* ---------- 6. Reports list: side list of views ---------- */
+.rb-lnav { background: var(--slate-25); border-inline-end: 1px solid var(--rule); padding: 12px 10px; }
+.rb-lnav-i {
+  height: 38px; border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--text-primary);
+  mat-icon { color: var(--text-secondary); }
+  &:hover { background: var(--slate-100); }
+  &.on { background: var(--blue-50); color: var(--color-science); font-weight: 600; mat-icon, .n { color: var(--color-science); } }
+}
+.rb-lnav-h { font-size: var(--text-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-secondary); }
+.rb-lnav-sep { background: var(--rule); }
+.rb-lhead h2 { font-size: var(--text-md); font-weight: 700; }
+
+/* ---------- 7. Chips, tags, pills ---------- */
+.rb-tag, .rb-soonb, .rb-pill, .fx-status {
+  display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs); font-weight: 600;
+  padding: 2px 9px; border-radius: var(--radius-pill); border: none;
+}
+.rb-tag.ok, .fx-status.ok { background: var(--success-bg); color: var(--success-ink); }
+.rb-tag.mute, .fx-status.off, .rb-pill { background: var(--slate-100); color: var(--slate-700); }
+.rb-tag.run { background: var(--warning-bg); color: var(--warning-ink); }
+.rb-tag.info { background: var(--info-bg); color: var(--blue-700); }
+.rb-chip { border-radius: var(--radius-pill); border-color: var(--border-strong); font-size: var(--text-xs); padding: 3px 4px 3px 10px;
+  &.mine { background: var(--blue-50); border-color: var(--blue-100); } }
+.rb-chip.add { border-color: var(--blue-200); background: var(--blue-50); color: var(--blue-600); font-weight: 600; }
+.fx-chip { border-radius: var(--radius-pill); background: var(--blue-50); border-color: var(--blue-100); color: var(--color-midnight); }
+
+/* ---------- 8. Popovers, dialogs, drawer, toast ---------- */
+.rb-pop { border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 12px 32px rgba(15, 35, 60, .14); padding: 8px; }
+.rb-mlab { font-size: var(--text-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); padding: 6px 10px 8px; }
+.rb-mempty { padding: 10px; font-size: var(--text-sm); color: var(--text-secondary); }
+.rb-mi { border-radius: var(--radius-sm); font-size: var(--text-sm); padding: 8px 10px; gap: 9px;
+  mat-icon { color: var(--text-secondary); font-size: 18px; width: 18px; height: 18px; }
+  &:hover:not(:disabled) { background: var(--slate-50); }
+  &.on { background: var(--blue-50); color: var(--color-science); font-weight: 600; mat-icon { color: var(--color-science); } } }
+.rb-msep { background: var(--slate-100); margin: 6px -8px; }
+.rb-scrim, .rb-dscrim { background: rgb(15 35 60 / .38); }
+.rb-dlg {
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-overlay); padding: 20px 24px 18px;
+  > h3 { font-size: var(--text-lg); font-weight: 700; margin: 0 0 8px; }
+}
+.rb-dlg-foot { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.rb-drawer { box-shadow: var(--shadow-overlay); .rb-dh b { font-family: var(--font-display); font-weight: 700; color: var(--color-midnight); } }
+.rb-toast { background: var(--color-midnight); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); font-size: var(--text-sm);
+  .fx-link { color: var(--orange-200); } }
+
+/* ---------- 9. Text ---------- */
+.muted, .rb-rd, .rb-lr, .fx-hint, .rb-hint { color: var(--text-secondary); }
+.rb-ferr, .rb-perr, .fx-field-error { color: var(--danger-ink); font-weight: 600; font-size: var(--text-xs); }
+.rb-flab, .rb-frm label, .rb-plab, .fx-label { font-size: var(--text-xs); font-weight: 500; color: var(--text-secondary); }
+.rb-kpi b { font-family: var(--font-display); font-size: var(--text-xl); font-weight: 700; color: var(--color-midnight); }
+.rb-spin { border-color: var(--blue-100); border-top-color: var(--color-science); }
+
+/* =============================================================
+   10. Registration's rules, not just its look (16 Nov 2026)
+   ============================================================= */
+
+/* ---- One priority per row. Run is the row's one secondary button; anything
+   beside it steps back to grey text, so the desk chooses once per row. ---- */
+.rb-lact .fx-btn-ghost, .rb-racts .fx-btn-ghost {
+  color: var(--text-secondary);
+  mat-icon { color: var(--text-secondary); }
+  &:hover:not(:disabled) { background: var(--slate-100); color: var(--color-midnight); }
+}
+
+/* ---- Inside a card, a hairline divides; it never encloses. ---- */
+/* Report settings: a pane beside the sample, divided by a rule, not a box in a box */
+.rb-spane {
+  border: none; border-radius: 0; background: transparent;
+  border-inline-end: 1px solid var(--rule); padding-inline-end: 4px;
+}
+.rb-spane.closed { border-radius: var(--radius-md); }
+.rb-spaneh { padding-inline-start: 2px; background: transparent; }
+.rb-psh { padding-inline-start: 2px; }
+.rb-psb { padding-inline: 2px 12px; }
+/* Each filter is a row of the Filters section, divided by a rule */
+.rb-fitem {
+  border: none; border-radius: 0; margin: 0; padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+  &.bad { box-shadow: inset 3px 0 0 var(--danger); padding-inline-start: 10px; background: var(--danger-bg); }
+}
+.rb-addf { margin-top: 10px; }
+/* The sample is a section of the page card: heading, then its table */
+.rb-spanel { border: none; border-radius: 0; padding: 0; background: transparent; }
+.rb-sph { margin-bottom: 8px; b { font-family: var(--font-display); font-weight: 700; color: var(--color-midnight); } }
+/* Builder lists: rows divided by rules, not a stack of bordered cards */
+.rb-item {
+  border: none; border-radius: 0; margin: 0; background: transparent;
+  border-bottom: 1px solid var(--rule); min-height: 44px; padding: 5px 2px;
+  &:hover { background: var(--slate-25); }
+}
+/* Run dialog: sections divided by rules, not boxed */
+.rb-rsec {
+  border: none; border-radius: 0; margin: 0; padding: 14px 0;
+  border-top: 1px solid var(--rule);
+}
+.rb-rsec:first-of-type { border-top: none; padding-top: 6px; }
+.rb-rlab { font-family: var(--font-display); font-weight: 700; color: var(--color-midnight); }
+
+/* ---- Status chips: the tint carries the meaning and the dot repeats it, so the
+   state never rests on colour alone. Only for states (Published, Draft, Paused,
+   Unsaved…); a label that states a fact (folder, My version) stays plain. ---- */
+.rb-tag.status::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; flex: none; opacity: .85;
+}
+
+/* ---- 4. Mnemonics: the letter Alt runs is underlined on the control (Registration's .mnemonic u) ---- */
+.fx-btn u, .rb-tab u, .rb-htab u { text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+
+/* ---- 5. Registration's window classes. Compact and medium are ONE pane: the views or the reports,
+   never both stacked. data-pane comes from Viewport.singlePane() in list.ts. ---- */
+.pane-back {
+  display: none; align-items: center; gap: 4px; height: var(--control-h-sm); padding: 0 12px 0 6px; margin: 12px 16px 0;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-surface);
+  font: inherit; font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); cursor: pointer; align-self: flex-start;
+  mat-icon { font-size: 18px; width: 18px; height: 18px; }
+  &:hover { background: var(--bg-subtle); border-color: var(--slate-400); }
+}
+.rb-lcard[data-pane] { grid-template-columns: 1fr; }
+.rb-lcard[data-pane='list'] .rb-lmain { display: none; }
+.rb-lcard[data-pane='list'] .rb-lnav { display: flex; flex-direction: column; overflow: visible; border: none;
+  .rb-lnav-i { width: 100%; } .rb-lnav-h, .rb-lnav-sep { display: block; } }
+.rb-lcard[data-pane='detail'] .rb-lnav { display: none; }
+.rb-lcard[data-pane='detail'] .pane-back { display: inline-flex; }
+@media (max-width: 839.98px) {
+  .rb-page { padding: 16px; gap: 14px; }
+  /* Report settings and the sample: one at a time. The pane's collapse shows the sample, its rail brings settings back. */
+  .rb-scols:not(.narrow) { grid-template-columns: 1fr; .rb-scol-main { display: none; } }
+  .rb-spane:not(.closed) { border-inline-end: none; }
+}
+@media (max-width: 599.98px) {
+  .rb-page { padding: 12px; }
+  .rb-dhead h1 { font-size: var(--text-xl); }
+}
+
+/* ---- 6. Right-to-left (Arabic). Margins, paddings and borders are logical now; these are the
+   pieces that are drawn, not laid out. ---- */
+[dir='rtl'] {
+  .rb-tag.status::before { order: 0; }
+  mat-icon[data-i='chevron_left'], mat-icon[data-i='chevron_right'], mat-icon[data-i='arrow_back'],
+  mat-icon[data-i='arrow_forward'], mat-icon[data-i='open_in_new'] { transform: scaleX(-1); }
+  .rb-vtab span { transform: none; }
+  .rb-toast { direction: rtl; }
+}
+
+/* Below 600 a list row stops being a row (Registration's .queue-tbl): the title on its own line,
+   the period under it, the actions on a line of their own. Nothing scrolls sideways. */
+@media (max-width: 599.98px) {
+  .rb-lmain .rb-ltw { padding: 0 12px 12px; }
+  .rb-lmain table.rb-lt { display: block; table-layout: auto;
+    colgroup, thead { display: none; }
+    tbody { display: block; }
+    tr { display: flex; flex-direction: column; gap: 6px; padding: 12px 4px; border-bottom: 1px solid var(--rule); }
+    td { display: block; border: none; padding: 0; white-space: normal; overflow: visible; }
+    td.rb-lact { text-align: start; padding-top: 4px; }
+    tr.rb-rowlink:hover td:first-child { box-shadow: none; }
+  }
+  .rb-lmain .rb-ltitle { -webkit-line-clamp: 3; }
+  .rb-meta2 { padding-inline-start: 0; }
+}
+
+/* =============================================================
+   11. Registration's desk layout (17 Nov 2026)
+   medinous-registration-v2: pages/patient-hub (hub-shell, desk-bar)
+   and ui/patient-list (the blue-grey list, 30 Oct trial).
+   The list stays beside the open thing; the bar under the top bar holds
+   the module's queues; whatever is open gets a band above that bar.
+   ============================================================= */
+.hub-shell { flex: 1; min-height: 0; display: flex; align-items: stretch; }
+.hub-main { flex: 1; min-width: 0; min-height: 0; overflow: auto; display: flex; flex-direction: column; background: var(--level-ground); }
+.hub-work { flex: 1 0 auto; padding: 20px 24px 24px; display: flex; flex-direction: column; gap: 16px; }
+
+/* ---- The list ---- */
+rb-side-list {
+  width: 272px; flex: none; min-height: 0; display: flex; flex-direction: column;
+  background: linear-gradient(180deg, #EDF3F9 0%, #E2EAF4 100%);
+  border-inline-end: 1px solid rgb(0 46 91 / .10);
+  color: var(--color-midnight);
+  &.folded { width: 44px; }
+}
+.pl-head { flex: none; padding: 16px 14px 12px; display: flex; flex-direction: column; gap: 10px; }
+.pl-top { display: flex; align-items: center; gap: 6px;
+  h2 { font-family: var(--font-display); font-size: var(--text-md); font-weight: 700; margin: 0; color: var(--color-midnight); }
+  .pl-link { margin-inline-start: auto; }
+  .fx-icon-btn { color: #4A6584; &:hover { background: rgb(255 255 255 / .75); color: var(--color-midnight); } } }
+.pl-link {
+  display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 8px; border: none; border-radius: var(--radius-sm);
+  background: none; font: inherit; font-size: var(--text-sm); font-weight: 600; color: var(--color-science); cursor: pointer;
+  mat-icon { font-size: 16px; width: 16px; height: 16px; }
+  &:hover { background: rgb(255 255 255 / .75); }
+}
+.pl-adv { align-self: flex-start; margin-inline-start: -8px; }
+.pl-search {
+  display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px 0 10px;
+  border: 1px solid rgb(0 46 91 / .14); border-radius: var(--radius-sm); background: #fff; color: #4A6584;
+  mat-icon { font-size: 17px; width: 17px; height: 17px; }
+  input { flex: 1; min-width: 0; height: 32px !important; border: none !important; box-shadow: none !important; padding: 0 !important; background: transparent; font-size: var(--text-sm); }
+  input::placeholder { color: var(--text-muted); }
+  &:hover { border-color: rgb(0 46 91 / .28); }
+  &:focus-within { border-color: var(--color-science); box-shadow: 0 0 0 3px rgb(0 102 204 / .14); }
+}
+.pl-seg {
+  display: flex; border: 1px solid rgb(0 46 91 / .14); border-radius: var(--radius-sm); overflow: hidden; background: rgb(255 255 255 / .5);
+  button { flex: 1 1 0; min-width: 0; height: 32px; border: none; background: transparent; font: inherit; font-size: var(--text-sm);
+    color: #4A6584; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px;
+    & + button { border-inline-start: 1px solid rgb(0 46 91 / .14); }
+    &:hover { background: rgb(255 255 255 / .75); color: var(--color-midnight); }
+    &[aria-checked="true"] { background: var(--color-science); color: #fff; font-weight: 700; } }
+}
+.pl-check { display: flex; align-items: center; gap: 7px; font-size: var(--text-sm); color: #4A6584; cursor: pointer; }
+.pl-built {
+  display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 10px; border-radius: var(--radius-md);
+  background: rgb(255 255 255 / .7); border: 1px solid rgb(0 46 91 / .14);
+  > mat-icon { color: #e0a100; font-size: 18px; width: 18px; height: 18px; }
+  .grow { flex: 1; min-width: 0; }
+  b { display: block; font-size: var(--text-sm); color: var(--color-midnight); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  small { display: block; font-size: var(--text-xs); color: #4A6584; }
+}
+.pl-rows { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 12px; scrollbar-color: rgb(0 46 91 / .22) transparent; }
+.pl-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 8px; border: none; background: none;
+  border-radius: var(--radius-sm); font: inherit; text-align: start; cursor: pointer; min-width: 0; color: var(--color-midnight);
+  transition: background-color .12s ease;
+  .grow { flex: 1; min-width: 0; }
+  b { display: block; font-size: var(--text-sm); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  small { display: block; font-size: var(--text-xs); color: #4A6584; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pl-ic { flex: none; font-size: 18px; width: 18px; height: 18px; color: #4A6584; &.fav { color: #e0a100; } }
+  &:hover { background: rgb(255 255 255 / .75); }
+  &:focus-visible { outline: 2px solid var(--color-science); outline-offset: -2px; }
+  &.on, &.on:hover { background: #fff; box-shadow: inset 3px 0 0 var(--color-science), 0 1px 3px rgb(0 46 91 / .08); b { color: var(--color-science); } }
+}
+/* One neutral chip with a coloured dot (Registration, 27 Oct): the name keeps the width. */
+.pl-badge {
+  flex: none; display: inline-flex; align-items: center; gap: 4px; max-width: 88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--text-2xs); font-weight: 600; padding: 2px 6px 2px 5px; border-radius: var(--radius-pill);
+  background: rgb(255 255 255 / .8); color: var(--text-secondary);
+  &::before { content: ""; width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--dot, var(--slate-400)); }
+  &.ok { --dot: var(--success); } &.info { --dot: var(--color-science); } &.warn { --dot: var(--warning); }
+  &.danger { --dot: var(--danger); } &.mute { --dot: var(--slate-400); }
+}
+.pl-row:hover .pl-badge { background: #fff; }
+.pl-empty { padding: 20px 10px; font-size: var(--text-sm); color: #4A6584; line-height: 1.5; }
+.pl-rail {
+  flex: 1; width: 100%; border: none; background: none; cursor: pointer; font: inherit;
+  display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px 0; color: #4A6584;
+  &:hover { background: rgb(255 255 255 / .75); color: var(--color-midnight); }
+}
+.pl-rail-count { font-size: var(--text-sm); font-weight: 700; padding: 2px 7px; border-radius: var(--radius-pill); background: var(--color-science); color: #fff; }
+.pl-rail-label { writing-mode: vertical-rl; font-size: var(--text-xs); font-weight: 600; letter-spacing: .04em; }
+[dir="rtl"] .pl-rail-label { transform: rotate(180deg); }
+
+/* ---- The desk bar: the module's queues, in one strip ---- */
+.desk-bar {
+  flex: none; display: flex; align-items: stretch; gap: 16px; position: sticky; top: 0; z-index: 3;
+  background: var(--level-raised); border-bottom: 1px solid var(--border);
+}
+.desk-bar > .tabs { flex: 1; min-width: 0; display: flex; gap: 2px; padding: 0 24px; overflow-x: auto; }
+.desk-bar-end { flex: none; display: flex; align-items: center; gap: 14px; padding-inline: 4px 24px; }
+.desk-when { font-size: var(--text-sm); font-weight: 600; color: var(--text-secondary); white-space: nowrap; }
+.tabs button {
+  height: 46px; padding: 0 16px; border: none; border-bottom: 3px solid transparent; background: none; font: inherit;
+  font-size: var(--text-base); color: var(--text-secondary); cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+  &:hover { color: var(--text-primary); background: var(--bg-subtle); }
+  &[aria-selected="true"] { border-bottom-color: var(--color-science); color: var(--color-science); font-weight: 700;
+    background: linear-gradient(to bottom, transparent 35%, var(--blue-50) 100%); }
+  .count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; padding: 2px 7px;
+    border-radius: var(--radius-pill); font-size: var(--text-2xs); font-weight: 700; font-variant-numeric: tabular-nums;
+    background: var(--slate-100); color: var(--text-secondary); }
+  &.has-work .count { background: var(--slate-200); color: var(--color-midnight); }
+  &[aria-selected="true"] .count { background: var(--color-science); color: #fff; }
+  .rb-failb { margin-inline-start: -2px; }
+}
+.hub-work > .rb-lcard { display: block; min-height: 0; }
+.rb-lhead { align-items: center; .rb-lhead-menu { margin-inline-start: auto; } }
+
+/* ---- The open report: a band above the bar, as the patient band is above the stages ---- */
+.rb-docpage > .rb-doc {
+  flex: 1 0 auto; display: flex; flex-direction: column; background: transparent; box-shadow: none; border-radius: 0; overflow: visible;
+}
+.rb-docpage .rb-qhead { padding: 0; border-bottom: 1px solid var(--border); background: var(--level-raised); position: sticky; top: 0; z-index: 3; }
+.rb-docpage .rb-qcrumb {
+  padding: 14px 24px 12px; gap: 10px;
+  background: radial-gradient(120% 160% at 100% 0%, rgb(0 102 204 / .07) 0%, transparent 55%), var(--color-surface-cool);
+  border-bottom: 1px solid var(--rule);
+  > .fx-link:first-child {
+    width: 32px; height: 32px; padding: 0; justify-content: center; border-radius: var(--radius-sm); font-size: 0; gap: 0;
+    mat-icon { font-size: 20px; width: 20px; height: 20px; }
+    &:hover { background: rgb(0 0 0 / .06); }
+  }
+  > span.muted:not(.tiny) { display: none; }
+  .rb-qtitle { font-size: var(--text-xl); font-weight: 700; }
+}
+.rb-docpage .rb-qbar { margin: 0; padding: 0 24px; align-items: stretch; }
+.rb-docpage .rb-qtools { padding: 0; align-items: center; }
+.rb-docpage .rb-qtabs { gap: 2px; }
+.rb-docpage .rb-qtabs .rb-tab { height: 46px; }
+.rb-docpage .rb-sbody { padding: 20px 24px 24px; gap: 16px; }
+.rb-docpage .rb-sbar { background: var(--level-raised); box-shadow: var(--shadow-card); border-radius: var(--radius-card); padding: 12px 16px; }
+.rb-docpage .rb-scols { background: var(--level-raised); box-shadow: var(--shadow-card); border-radius: var(--radius-card); padding: 14px 16px; }
+.rb-resbody {
+  margin: 20px 24px 24px; background: var(--level-raised); box-shadow: var(--shadow-card); border-radius: var(--radius-card);
+  display: flex; flex-direction: column; flex: 1 0 auto; padding-bottom: 4px;
+  > rb-table { display: flex; flex-direction: column; padding: 0 16px 14px; }
+  .rb-chart { padding-top: 0; }
+}
+
+/* ---- The builder: the same band, full width, over the work ---- */
+.rb-bpage.hub-main { padding: 0; gap: 0; overflow: hidden; }
+.rb-bpage > .rb-btop {
+  border-radius: 0; box-shadow: none; padding: 14px 24px; border-bottom: 1px solid var(--border);
+  background: radial-gradient(120% 160% at 100% 0%, rgb(0 102 204 / .07) 0%, transparent 55%), var(--color-surface-cool);
+}
+.rb-bpage > .rb-work { padding: 16px 24px 20px; flex: 1; min-height: 0; }
+
+/* ---- Registration's widths: the list gives way first ---- */
+@media (max-width: 1199.98px) { rb-side-list:not(.folded) { width: 236px; } }
+@media (max-width: 839.98px) {
+  rb-side-list { display: none; }
+  .hub-work, .rb-docpage .rb-sbody { padding: 14px 16px; }
+  .rb-resbody { margin: 14px 16px; }
+  .desk-bar > .tabs { padding: 0 12px; }
+  .desk-bar-end { display: none; }
+}
+
+/* ---- The report band: Registration's patient band, for a report ----
+   Back chevron, a round mark (the avatar's place), who it is and its facts, actions at the right. */
+.rb-docpage .rb-band {
+  display: flex; align-items: center; gap: 14px; flex-wrap: nowrap; padding: 16px 24px;
+}
+.rb-band-mark {
+  width: 56px; height: 56px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--color-science); color: #fff; box-shadow: inset 0 0 0 1px rgb(0 46 91 / .06);
+  mat-icon { font-size: 26px; width: 26px; height: 26px; }
+}
+.rb-band-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.rb-band-row { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap;
+  .rb-qtitle { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .rb-star { margin-inline-start: -6px; } }
+.rb-band-facts { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--text-sm); color: var(--slate-700);
+  > span + span::before { content: '·'; margin-inline-end: 12px; color: var(--slate-400); } }
+.rb-docpage .rb-band > .rb-qtools { flex: none; margin: 0; padding: 0; display: flex; align-items: center; gap: 8px; }
+.rb-docpage .rb-qbar { border-top: none; }
+@media (max-width: 1199.98px) {
+  .rb-band-mark { width: 44px; height: 44px; mat-icon { font-size: 22px; width: 22px; height: 22px; } }
+  .rb-docpage .rb-band { flex-wrap: wrap; }
+  .rb-docpage .rb-band > .rb-qtools { margin-inline-start: auto; }
+}
+@media (max-width: 599.98px) { .rb-band-mark { display: none; } }
+.rb-bpage > .rb-btop { display: flex; align-items: center; gap: 14px; }
+.rb-band-back { color: var(--color-science); &:hover { background: rgb(0 0 0 / .06); color: var(--color-science); } }
+.rb-bpage .rb-btop-main .rb-src { margin-top: 4px; }
+/* Results: only the table scrolls. Band + bar + summary + toolbar sit above it (measured at 1440x900: table top 356px). */
+.rb-resbody > rb-table .rb-tw { flex: none; height: auto; max-height: max(240px, calc(100vh - 430px)); }
+
+/* =============================================================
+   12. Icons as Registration uses them (17 Nov 2026)
+   Measured in medinous-registration-v2: Heroicons outline, stroke 1.6,
+   16px in buttons and links, 14px for small chevrons, 18px for the band's
+   back, 19-20px in the top bar. And icons only on things you click:
+   tabs, headings and labels there are plain text.
+   ============================================================= */
+.fx-btn mat-icon, .fx-btn.fx-btn-sm mat-icon, .fx-link mat-icon, .pl-link mat-icon { font-size: 16px; width: 16px; height: 16px; }
+.fx-icon-btn mat-icon { font-size: 18px; width: 18px; height: 18px; }
+.fx-icon-btn.sm mat-icon { font-size: 16px; width: 16px; height: 16px; }
+.pl-top .fx-icon-btn mat-icon, .pl-rail mat-icon { font-size: 16px; width: 16px; height: 16px; }
+.pl-search mat-icon { font-size: 16px; width: 16px; height: 16px; }
+.rb-docpage .rb-qcrumb > .fx-link:first-child mat-icon, .rb-band-back mat-icon { font-size: 18px; width: 18px; height: 18px; }
+.rb-mi mat-icon { font-size: 16px; width: 16px; height: 16px; }
+.rb-star mat-icon { font-size: 18px; width: 18px; height: 18px; }
+mat-icon.xs { font-size: 12px; width: 12px; height: 12px; }
+.fx-chip mat-icon, .rb-chip mat-icon, .rb-chip button mat-icon { font-size: 13px; width: 13px; height: 13px; }
+
+/* Labels, headings and tabs are words, as in Registration. Their icons go. */
+mat-icon.rb-tabi,                                   /* Settings / Results tabs */
+.rb-sbg > mat-icon,                         /* Assigned report, Period, Show as */
+mat-icon.rb-psi,                                    /* Filters, Columns and sort, Group by */
+.rb-sph > mat-icon,                         /* Sample only */
+.rb-rlab > mat-icon,                        /* Run dialog: Show as, Period, Filters */
+.rb-pvlab > mat-icon,
+.rb-tag > mat-icon.xs,                      /* Scheduled, Shared with 1, Daily checks: the dot or the word carries it */
+.pl-adv > mat-icon { display: none !important; }
+.rb-tag.ok, .rb-tag.run, .rb-tag.vio, .rb-tag.info, .rb-tag.mute { gap: 4px; }
+
+/* List rows lead with a round mark, as Registration's lead with the patient's initials. */
+.pl-row .pl-ic {
+  width: 30px; height: 30px; flex: none; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  background: #fff; box-shadow: inset 0 0 0 1px rgb(0 46 91 / .06);
+  font-size: 0; color: var(--color-midnight);
+  -webkit-mask: none; mask: none; -webkit-text-fill-color: currentColor; background-color: #fff;
+}
+.pl-row .pl-ic::after {
+  content: ''; width: 16px; height: 16px; background-color: currentColor;
+  -webkit-mask: var(--hi) center / contain no-repeat; mask: var(--hi) center / contain no-repeat;
+}
+.pl-row .pl-ic.fav { color: #e0a100; }
+.pl-row.on .pl-ic { background-color: var(--blue-50); color: var(--color-science); }
+.pl-row.on .pl-ic.fav { color: #e0a100; }
+mat-icon.rb-pse { font-size: 16px; width: 16px; height: 16px; }
+.rb-sentence > mat-icon { font-size: 16px; width: 16px; height: 16px; margin-top: 2px; }
+mat-icon.rb-cgrip { font-size: 16px !important; width: 16px !important; height: 16px !important; }
+.rb-empty > mat-icon.big, .rb-pvempty > mat-icon { display: none; }
+
+/* =============================================================
+   13. Spacing measured against Registration (17 Nov 2026)
+   Each value below is what medinous-registration-v2 computes at 1440x900
+   for the matching element on the front desk.
+   ============================================================= */
+/* Gutters: .page is 24px 28px; the desk strip insets its tabs 28px */
+.hub-work { padding: 24px 28px 28px; }
+.desk-bar > .tabs { padding: 0 28px; }
+.desk-bar-end { padding-inline: 4px 24px; }
+.rb-docpage .rb-sbody { padding: 24px 28px 28px; }
+.rb-resbody { margin: 24px 28px 28px; }
+.rb-docpage .rb-band, .rb-docpage .rb-qbar, .rb-bpage > .rb-btop { padding-inline: 28px; }
+.rb-bpage > .rb-work { padding: 24px 28px 28px; }
+
+/* The list: .link-btn is 31px, 14px/600, 10px sides, 5px gap; the seg is 38px; a row's gap is 11px */
+.pl-link { height: 31px; padding: 0 10px; font-size: var(--text-base); gap: 5px; }
+.pl-search { padding: 0 10px; }
+.pl-seg { min-height: 38px; button { height: auto; } }
+.pl-row { gap: 11px; }
+
+/* Buttons: Kendo md in Registration is 14px; secondary 400, primary 600 */
+.fx-btn, .fx-btn.fx-btn-sm { font-size: var(--text-base); gap: 4px; }
+.fx-btn-secondary { font-weight: 400; }
+.fx-btn-primary { font-weight: 600; }
+.desk-bar-end .fx-btn { height: 30px; padding: 0 8px; }
+/* A row action is a 26px secondary, 8px sides (Registration .row-actions) */
+.rb-lact .fx-btn { height: 26px; padding: 0 8px; }
+
+/* Card head: 12px 20px, a hairline under it, the context line below the title at 13px */
+.rb-lhead {
+  padding: 12px 20px; min-height: 56px; border-bottom: 1px solid var(--rule); flex-wrap: wrap; gap: 4px 12px;
+  h2 { order: 1; }
+  .rb-lhead-menu { order: 2; }
+  > .muted { order: 3; flex-basis: 100%; font-size: var(--text-sm); }
+}
+/* Tables sit flush in the card; cells 9px 20px / 11px 20px, 14px text */
+.rb-lmain .rb-ltw { padding: 0; }
+table.rb-lt th { padding: 9px 20px; }
+table.rb-lt td { padding: 11px 20px; font-size: var(--text-base); }
+table.rb-lt td.muted, table.rb-lt td .tiny { font-size: var(--text-sm); }
+
+/* ---- The band, against Registration's full patient band ---- */
+.rb-docpage .rb-qcrumb .rb-qtitle, .rb-bpage input.rb-title-in.rb-title-in { font-size: 20px; }   /* 20px name: under the Fusion bar, never bigger than its 20.8px hospital name */
+.rb-bpage input.rb-title-in.rb-title-in { height: 34px; }
+.rb-band-facts { font-size: var(--text-base); }                                                          /* 14px facts */
+.rb-qtools .fx-btn, .rb-bpage > .rb-btop > .fx-btn { height: 30px; padding: 0 8px; }                      /* 30px, 8px sides */
+
+/* ---- Chips: Registration's .badge is 12px/600, 4px 10px ---- */
+.rb-tag, .fx-status { padding: 4px 10px; }
+.rb-band-row .rb-tag, .rb-band-row .rb-pill { padding: 4px 10px; font-size: var(--text-xs); }
+
+/* ---- Fields: 14px text in a 38px box; labels 12px/500 in the secondary ink ---- */
+select, .rb-sel, .rb-inp, .rb-ta,
+input:not([type='checkbox']):not([type='radio']):not([type='color']), textarea { font-size: var(--text-base); }
+.pl-search input, .drawer-search input { font-size: var(--text-sm) !important; }
+.rb-sbg > b { font-size: var(--text-xs); font-weight: 500; color: var(--text-secondary); }
+.fx-seg { min-height: 38px; button { height: auto; min-height: 36px; font-size: var(--text-sm); } }
+.fx-seg.sm { min-height: 32px; button { min-height: 30px; } }
+.rb-sentence { font-size: var(--text-sm); }
+
+/* ---- The sample table: the table rhythm, at Registration's narrower 16px sides ---- */
+table.rb-pvt th { padding: 9px 16px; }
+table.rb-pvt td { padding: 9px 16px; }
+/* Registration has one segmented control, 38px: the small variant goes */
+.fx-seg.sm { min-height: 38px; }
+.fx-seg.sm button { height: auto; min-height: 36px; padding: 0 12px; font-size: var(--text-sm); }
+/* The title column carries the name, its description and up to three tags: give it the width the period column was not using */
+.rb-lmain table.rb-lt col.c-title { width: 47%; }
+.rb-lmain table.rb-lt col.c-per { width: 25%; }
+.rb-racts .fx-btn { height: 26px; padding: 0 8px; }
+/* =============================================================
+   14. Report settings vs the sample (17 Nov 2026)
+   Both were white inside one white card, so nothing told the controls from
+   the data. Registration separates zones by putting cards on the ground, not
+   by tinting inside a card: settings and sample become two sibling cards with
+   the page between them. (A warm tint was tried and dropped: Registration
+   uses the warm surface for "needs attention".)
+   ============================================================= */
+.rb-docpage .rb-scols { background: transparent; box-shadow: none; padding: 0; gap: 16px; align-items: stretch; }
+.rb-docpage .rb-spane,
+.rb-docpage .rb-scol-main { background: var(--level-raised); box-shadow: var(--shadow-card); border-radius: var(--radius-card); }
+.rb-docpage .rb-spane { border: none; padding: 4px 0 8px; overflow: hidden; }
+.rb-docpage .rb-scol-main { padding: 14px 20px 16px; }
+.rb-docpage .rb-spane .rb-spaneh { padding-inline: 16px 8px; }
+.rb-docpage .rb-spane .rb-psh { background: transparent; padding-inline: 16px 10px; }
+.rb-docpage .rb-spane .rb-psh:hover { background: var(--slate-50); }
+.rb-docpage .rb-spane .rb-psec.open .rb-psh { background: transparent; }
+.rb-docpage .rb-spane .rb-psb { padding-inline: 16px; }
+/* On a white card the chips take the cool surface, so they still read as chips */
+.rb-docpage .rb-spane .rb-chip:not(.add) { background: var(--slate-50); }
+.rb-docpage .rb-spane.closed { padding: 8px 0; }
+
+/* =============================================================
+   15. Tooltips and the (i) (17 Nov 2026)
+   Copy was cut to a few words; the sentence it lost lives one hover away.
+   ============================================================= */
+rb-info { display: inline-flex; vertical-align: middle; }
+.rb-info {
+  display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; margin-inline-start: 2px;
+  border: 0; border-radius: 50%; background: transparent; color: var(--text-secondary); cursor: help; flex: none;
+  mat-icon { font-size: 15px; width: 15px; height: 15px; }
+  &:hover, &:focus-visible { color: var(--color-science); background: var(--blue-50); }
+}
+.mat-mdc-tooltip .mdc-tooltip__surface {
+  font-family: 'DM Sans', sans-serif; font-size: 13px; line-height: 1.4; padding: 6px 10px; max-width: 280px;
+  background: var(--color-midnight); border-radius: 6px; text-align: start;
+}
+.rb-addrow { display: flex; align-items: center; gap: 4px; margin-top: 10px; .rb-addf { margin-top: 0; } }
+h3 > rb-info, .rb-flab > rb-info { margin-inline-start: 2px; }
+
+/* =============================================================
+   16. Alignment at every width (17 Nov 2026)
+   Measured with an overlap check at 1440, 1280, 1100, 960, 841, 800, 600
+   and 375: rows that wrapped by accident, groups whose parts ended up on
+   different lines, and controls of mixed heights in one row.
+   ============================================================= */
+
+/* Run dialog: the download formats are their own line; Cancel and the
+   primary action sit on the right underneath, as every other dialog's footer.
+   Before, the three groups needed 600px of a 592px row and the download
+   group dropped under at an odd offset. */
+.rb-rbtns { justify-content: flex-end; gap: 12px 8px; }
+.rb-rbtns > .rb-rdl {
+  order: -1; flex: 1 0 100%; margin: 0; padding: 0; border: 0; justify-content: flex-start;
+}
+
+/* Open report, settings bar: each group is label on top, control below,
+   all controls on one 38px line. Groups wrap whole, never split. */
+.rb-docpage .rb-sbar { align-items: flex-start; gap: 12px 32px; padding: 14px 20px 16px; }
+.rb-docpage .rb-sbg {
+  display: grid; grid-template-columns: auto 1fr; align-items: center; justify-items: start;
+  column-gap: 2px; row-gap: 6px; min-width: 0;
+  > b { grid-column: 1; line-height: 20px; }
+  > rb-info { grid-column: 2; }
+  > :not(b):not(rb-info):not(mat-icon) { grid-column: 1 / -1; }
+  .rb-tstatic { min-height: 38px; display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-base); }
+}
+
+/* Open report band: the name and its tags stay on one line. The name gives
+   way first (two lines, then an ellipsis); the tags never drop under the star. */
+.rb-band-row { flex-wrap: nowrap; align-items: center; }
+.rb-band-row > .rb-star { margin-inline-start: 0; }
+.rb-band-row > .rb-qtitle {
+  flex: 0 1 auto; min-width: 0; white-space: normal; overflow: hidden; text-overflow: clip;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.2;
+}
+.rb-band-row > .rb-tag, .rb-band-row > .rb-pill { flex: none; }
+@media (max-width: 1199.98px) { .rb-docpage .rb-band-row > .rb-qtitle { font-size: var(--text-lg); } }
+
+/* Side list: the filter words fit (each takes its own width, no ellipsis),
+   and a report name may take two lines before it is cut. */
+.pl-seg button { flex: 1 1 auto; overflow: visible; text-overflow: clip; padding: 0 8px; }
+.pl-row b { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.3; }
+
+/* Desk tab strip: when it must scroll, it scrolls without a grey bar across it */
+.desk-bar > .tabs { scrollbar-width: none; &::-webkit-scrollbar { display: none; } }
+
+/* IT dashboard, one template row: name and status on the first line; the module
+   pills and the actions centre on that same line. As the card narrows, the
+   pills move under the text, then the actions do. Queried on the card, so it
+   holds whether the side list is open or folded. */
+.rb-row:has(> .rb-rplace) {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: 'main place acts';
+  align-items: start; column-gap: 16px; row-gap: 8px; flex-wrap: nowrap;
+  > .rb-rmain { grid-area: main; }
+  > .rb-rplace { grid-area: place; min-height: 26px; align-items: center; max-width: 240px; }
+  > .rb-racts { grid-area: acts; min-height: 26px; flex-wrap: nowrap; width: auto; }
+  .rb-rt.static { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 26px; }
+  .rb-rt .rb-tag { margin: 0; }
+}
+:has(> .rb-row > .rb-rplace) { container-type: inline-size; }
+@container (max-width: 760px) {
+  .rb-row:has(> .rb-rplace) {
+    grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'main acts' 'place place';
+    > .rb-rplace { justify-content: flex-start; max-width: none; min-height: 0; }
+  }
+}
+@container (max-width: 480px) {
+  .rb-row:has(> .rb-rplace) {
+    grid-template-columns: minmax(0, 1fr); grid-template-areas: 'main' 'place' 'acts';
+    > .rb-racts { justify-content: flex-start; }
+  }
+}
+
+/* Builder panel (420px): the six tabs share the width instead of scrolling 2px */
+.rb-panel > .rb-tabs { overflow: hidden; button, .rb-tab { flex: 1 1 auto; padding-inline: 4px; justify-content: center; } }
+/* Highlight colours: an even 3 x 2 grid, not two ragged rows */
+.rb-hlsw { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; > .rb-hlsw-b { width: 100%; min-width: 0; justify-content: flex-start; } }
+/* A button that ends a row of 38px fields is 38px too */
+.rb-hlend .fx-btn, .rb-ruleform .fx-btn { height: 38px; }
+.rb-hlend { align-items: flex-end; }
+
+/* Band facts: the separator trails its fact, so a wrapped line never starts with a dot */
+.rb-band-facts { display: block; line-height: 1.5;
+  > span { display: inline; }
+  > span + span::before { content: none; }
+  > span:not(:last-child)::after { content: '·'; margin-inline: 8px; color: var(--slate-400); }
+}
+/* Below 1024px the band's actions take their own line, under the name, so the
+   name keeps the width instead of being squeezed to two cut lines */
+@media (max-width: 1023.98px) {
+  .rb-docpage .rb-band { flex-wrap: wrap; row-gap: 10px; }
+  .rb-docpage .rb-band > .rb-qtools { flex: 1 0 100%; margin: 0; padding-inline-start: 104px; justify-content: flex-start; flex-wrap: wrap; }
+}
+@media (max-width: 599.98px) { .rb-docpage .rb-band > .rb-qtools { padding-inline-start: 46px; } }
+
+/* Compact window (< 840px): the desktop gutters measured in section 13 came
+   later in this file than the compact ones and won. Registration's compact
+   gutter is 16px; restate it last. */
+@media (max-width: 839.98px) {
+  .hub-work { padding: 14px 16px 20px; }
+  .desk-bar > .tabs { padding: 0 8px; }
+  .rb-docpage .rb-sbody { padding: 14px 16px 20px; }
+  .rb-resbody { margin: 14px 16px 20px; }
+  .rb-docpage .rb-band, .rb-docpage .rb-qbar, .rb-bpage > .rb-btop { padding-inline: 16px; }
+  .rb-bpage > .rb-work { padding: 14px 16px 20px; }
+  .rb-docpage .rb-sbar { padding: 12px 16px 14px; gap: 12px 24px; }
+  .rb-docpage .rb-scol-main { padding: 12px 16px 14px; }
+  /* A tab strip that scrolls says so: the last tab fades at the edge */
+  .desk-bar > .tabs, .rb-qtabs { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+}
+@media (max-width: 599.98px) {
+  .rb-docpage .rb-band > .rb-qtools { padding-inline-start: 0; }
+  /* Show as: two equal halves, words only */
+  .rb-showas { display: grid; grid-template-columns: 1fr 1fr; width: 100%;
+    button { white-space: nowrap; justify-content: center; mat-icon { display: none; } } }
+  .rb-docpage .rb-sbg { width: 100%; }
+}
+@media (max-width: 839.98px) {
+  [dir='rtl'] .desk-bar > .tabs, [dir='rtl'] .rb-qtabs { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent); }
+}
+
+/* Six highlight colours in a 420px panel: two even columns, so no name wraps */
+.rb-hlsw { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Tabs: the keyboard focus ring follows the tab's own shape, inside it,
+   instead of a square box poking past the strip */
+.rb-tab:focus-visible, .desk-bar .tabs button:focus-visible, .rb-qtabs .rb-tab:focus-visible {
+  outline: 2px solid var(--color-science); outline-offset: -3px; border-radius: 8px 8px 0 0; box-shadow: none;
+}
+.rb-tab:focus:not(:focus-visible), .desk-bar .tabs button:focus:not(:focus-visible) { outline: none; }
+
+/* Band name: one line, as Registration's patient name. A two-line 28px name
+   became a block the star and tags centred against (17 Nov, Gokul: "what is
+   this?"). It ends in an ellipsis instead; doc.ts shows the whole name on hover
+   only when it is actually cut. */
+.rb-band-row > .rb-qtitle {
+  display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  -webkit-line-clamp: unset; line-height: 1.25;
+}
+
+/* ---------- 17. Shrunkal's review, 17 Nov 2026 ---------- */
+/* Builder name: reads as editable at rest. The box hugs the text, a dashed underline and a pencil follow it. */
+.rb-btop .rb-titlebox {
+  display: inline-flex; align-items: center; gap: 2px; max-width: 100%; cursor: text;
+  border-radius: 6px; padding-inline-end: 6px;
+  input.rb-title-in.rb-title-in {
+    font-family: var(--font-display); font-size: 20px; font-weight: 700; color: var(--color-midnight);   /* the global input rule (same weight, later) set 14px */
+    field-sizing: content; min-width: 10ch; max-width: 100%; width: auto; margin-inline-start: -8px;
+    border-bottom: 1px dashed var(--slate-400);
+    border-radius: 6px 6px 0 0;
+  }
+  .rb-title-pen { flex: none; font-size: 16px; width: 16px; height: 16px; color: var(--text-secondary); }
+  &:hover .rb-title-pen, &:focus-within .rb-title-pen { color: var(--color-science); }
+  /* Resting only: focus (blue) and error (red) must win the whole border, under the mouse too */
+  &:hover input.rb-title-in.rb-title-in:not(:focus):not(.bad) { border-color: var(--border); border-bottom-style: solid; }
+  input.rb-title-in.rb-title-in:focus { border-color: var(--color-science); border-bottom-style: solid; }
+  input.rb-title-in.rb-title-in.bad { border-color: var(--danger); border-bottom-style: solid; }
+}
+/* Results: the period first, as its own line; the rest of the criteria behind the (i) */
+.rb-resdates {
+  display: flex; align-items: center; gap: 6px; font-size: var(--text-base); color: var(--color-midnight);
+  mat-icon { font-size: 16px; width: 16px; height: 16px; color: var(--text-secondary); }
+  b { font-weight: 600; }
+}
+/* Folders view: a way back to All folders above the folder's name */
+/* The heading's (i) and folder switcher sit after the title: h2 has order 1 (section 13), so they need it too */
+.rb-lhead > rb-info, .rb-lhead > .rb-fswitch { order: 1; }
+.rb-lhead .rb-fswitch h2 { order: 0; }   /* the name, then its chevron */
+/* My reports' heading is also the folder switcher: All my reports, or one folder */
+.rb-lhead .rb-fswitch { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; margin-inline-start: -6px; border: none; border-radius: 6px;
+  background: none; cursor: pointer; font: inherit; color: inherit;
+  h2 { margin: 0; } mat-icon { font-size: 18px; width: 18px; height: 18px; color: var(--text-secondary); }
+  &:hover { background: var(--slate-50); } }
+/* Add reports to a folder: a checklist, one row per report */
+.rb-addlist { display: grid; gap: 2px; max-height: min(52vh, 420px); overflow-y: auto; margin: 0 -4px; min-width: min(420px, 80vw); }
+.rb-addrow2.rb-addrow2 { display: flex; align-items: flex-start; gap: 10px; padding: 8px 6px; border-radius: 6px; cursor: pointer;
+  input { margin-top: 3px; flex: none; }
+  b { display: block; font-weight: 600; color: var(--color-midnight); }
+  small { display: block; font-size: var(--text-xs); color: var(--text-secondary); }
+  &:hover { background: var(--slate-50); } }
+.rb-lhead .rb-addreps { order: 2; margin-inline-start: auto; }
+.rb-lhead .rb-addreps + .rb-lhead-menu { margin-inline-start: 0; }
+.rb-empty .fx-btn { margin-top: 10px; }
+
+/* ---------- 18. Compact pass, 17 Nov 2026 (Gokul: "compact and clean") ---------- */
+/* Settings bar: Assigned report, Period and Show as on one 34px line at desktop widths */
+.rb-docpage .rb-sbar { gap: 8px 24px; padding: 10px 16px 12px; }
+.rb-docpage .rb-sbg { row-gap: 4px; }
+.rb-docpage .rb-sbar .rb-sel { height: 34px; font-size: var(--text-sm); }
+.rb-docpage .rb-sbar .rb-tsel { min-width: 0; width: 260px; max-width: 100%; }
+.rb-docpage .rb-sbar .rb-psel { min-width: 0; width: 150px; }
+.rb-docpage .rb-sbar .rb-period { font-size: var(--text-xs); }
+.rb-docpage .rb-showas button { height: 34px; padding-inline: 12px; font-size: var(--text-sm); }
+.rb-docpage .rb-sbg .rb-tstatic { min-height: 34px; }
+
+/* Results header: one meta line (period, then run time), figures one size down, 34px tools */
+.rb-rmeta { padding: 10px 16px 0; gap: 6px; }
+.rb-resdates { flex-wrap: wrap; row-gap: 2px; }
+.rb-runmeta { display: inline-flex; align-items: center; gap: 2px; margin-inline-start: 10px; padding-inline-start: 12px;
+  border-inline-start: 1px solid var(--border); font-size: var(--text-xs); font-weight: 400; color: var(--text-secondary); }
+.rb-kpis { gap: 2px 20px; margin: 0; }
+.rb-kpi b { font-size: var(--text-lg); }
+.rb-vbar { padding-block: 8px; gap: 8px; }
+.rb-vbar .fx-btn, .rb-vbar .rb-find { height: 34px; }
+.rb-vbar .rb-find input { height: 32px !important; }
+
+/* Report rows: smaller tags so the template name and its tags stay on one line */
+.rb-lt .rb-meta2 { gap: 4px 6px; }
+.rb-lt .rb-meta2 .rb-tag { padding: 1px 8px; font-size: 11.5px; line-height: 18px; }
+
+/* Form labels with an (i): label and (i) on one line, the control below (the label is a grid otherwise) */
+.rb-flab:has(> rb-info) { display: block; }
+.rb-flab:has(> rb-info) > rb-info { display: inline-flex; vertical-align: middle; }
+.rb-flab:has(> rb-info) > :is(select, input, textarea, .rb-sel, .rb-inp) { display: block; width: 100%; margin-top: 4px; }
+/* Report rows: View/Edit is the same as clicking the row, so it is an icon with a tooltip; the
+   report column gets the width back and its tags stay on one line */
+.rb-lmain table.rb-lt col.c-act2 { width: 164px; }
+.rb-lmain table.rb-lt col.c-per { width: 22%; }
+.rb-lt .rb-vebtn { padding: 0 8px; span { display: none; } }
+/* Settings bar: Show as is two words each; its icons cost the width that kept it on one line */
+.rb-docpage .rb-showas mat-icon { display: none; }
+.rb-lt .rb-meta2 { gap: 4px; }
+.rb-lt .rb-meta2 .rb-tag { padding: 1px 7px; }
+.rb-lmain table.rb-lt col.c-per { width: 19%; }
+.rb-docpage .rb-showas button { height: 32px; }   /* + the segment's 1px border = 34, level with the selects */
+/* Report list columns, stated outright (four earlier rules disagreed): the report takes what is left */
+.rb-lmain table.rb-lt col.c-title { width: auto; }
+.rb-lmain table.rb-lt col.c-per { width: 20%; }
+.rb-lmain table.rb-lt col.c-run { width: 120px; }
+/* Show as: the segment's min-heights (38 / 36) beat the height above */
+.rb-docpage .rb-sbar .fx-seg.rb-showas { min-height: 34px; button { min-height: 32px; height: 32px; } }
+.rb-lmain table.rb-lt col.c-act2 { width: 176px; }
+.rb-lmain table.rb-lt col.c-run { width: 136px; }
+/* First cell keeps the card's 20px edge; the rest pack closer */
+.rb-lmain table.rb-lt :is(td, th):not(:first-child) { padding-inline: 12px; }
+.rb-lmain table.rb-lt .rb-lact { white-space: nowrap; }
+/* Period: its resolved dates move up beside the "Period" label, so the select sits alone below it
+   and the Assigned report select gets the width back. Custom dates keep their own row. */
+.rb-docpage .rb-sbg rb-period:has(> .rb-presolved) { display: contents; }
+.rb-docpage .rb-sbg rb-period > .rb-presolved { grid-row: 1; grid-column: 2; margin-inline-start: 8px; line-height: 20px; white-space: nowrap; }
+.rb-docpage .rb-sbg rb-period:has(> .rb-presolved) > .rb-psel { grid-row: 2; grid-column: 1 / -1; }
+.rb-docpage .rb-sbar .rb-tsel { width: 300px; }
+@media (max-width: 599.98px) { .rb-docpage .rb-sbg rb-period > .rb-presolved { white-space: normal; min-width: 0; } }
+
+/* ---------- 19. Builder, less scroll (Gokul, 17 Nov: "lot of scroll in report builder") ---------- */
+/* Sections: tighter padding; the head carries the (i) for the rule; hints sit close under it */
+.rb-bpage .rb-pbody .rb-sec { padding: 10px 14px; }
+.rb-bpage .rb-pbody .rb-sh { margin-bottom: 6px; align-items: center; > rb-info { margin-inline-start: -2px; } }
+.rb-bpage .rb-pbody .rb-sec > .rb-hint, .rb-bpage .rb-pbody .rb-sec p { margin: 2px 0 0; }
+.rb-bpage .rb-pbody .rb-sec > .fx-link + .rb-hint { margin-top: 6px; }
+.rb-bpage .rb-pbody .rb-sec > .rb-hint + .rb-opt, .rb-bpage .rb-pbody .rb-sec > .rb-prow + .rb-opt { margin-top: 10px; }
+.rb-bpage .rb-pbody .rb-item { min-height: 32px; padding-block: 3px; margin-bottom: 3px; }
+/* Add columns: one line per column; the description follows the name and truncates (full text on hover) */
+.rb-bpage .rb-fld { padding: 4px 2px; min-height: 34px; box-sizing: border-box; }
+.rb-bpage .rb-fld-main { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.rb-bpage .rb-fld-main > .rb-nm { flex: none; max-width: 60%; }
+.rb-bpage .rb-fld-main > .rb-fdesc { flex: 1; min-width: 0; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rb-bpage .rb-fld { min-height: 32px; padding-block: 2px; }
+.rb-bpage .rb-fld .rb-addb { width: 26px; height: 26px; }
+/* Builder panel controls: 28-30px, as Fusion's own desk screens are; rows sit at 32px */
+.rb-bpage .rb-pbody .rb-item .rb-sel, .rb-bpage .rb-pbody .rb-item .rb-inp { height: 28px; font-size: var(--text-sm); padding-block: 0; }
+.rb-bpage .rb-pbody .rb-item { min-height: 32px; padding-block: 2px; }
+.rb-bpage .rb-pbody .rb-prow .rb-sel { height: 30px; font-size: var(--text-sm); }
+.rb-bpage .rb-pbody .rb-sec { padding-block: 8px; }
+.rb-bpage .rb-pbody .rb-opt { margin-bottom: 4px; }
+
+/* ---------- 20. Report rows at 1280 (Gokul's screen): two lines per row, always ---------- */
+/* Tags never wrap: the template name gives way (ellipsis, full name on hover), the state tags keep their size */
+.rb-lt .rb-meta2 { flex-wrap: nowrap; overflow: hidden; min-width: 0; }
+.rb-lt .rb-meta2 > * { flex: none; }
+.rb-lt .rb-meta2 > .rb-tplname { flex: 0 1 auto; min-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Last run: two set lines */
+.rb-lt .rb-l2 { display: block; white-space: nowrap; }
+.rb-lmain table.rb-lt col.c-run { width: 148px; }
+/* Short of room (side list open at 1280): the folder tag gives way first, then the template name */
+.rb-lt .rb-meta2 > .rb-ftag { flex: 0 3 auto; min-width: 28px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: block; line-height: 18px; }
+
+/* ---------- 21. Report settings pane: proximity (Gokul, 17 Nov) ----------
+   Spacing says what belongs together. Inside a filter: 4px (name to values, values to "except").
+   A section's heading to its content: 6px. Filter to filter: 8px, divided by a rule.
+   Section to section: the heading's own 10px padding plus the border, the widest gap. */
+.rb-docpage .rb-spane .rb-psec.open > .rb-psh { padding-bottom: 6px; }
+.rb-docpage .rb-spane .rb-psb { padding-top: 0; padding-bottom: 12px; }
+.rb-docpage .rb-spane .rb-psb > p:first-child { margin-top: 0; }
+.rb-docpage .rb-spane .rb-fitem { gap: 4px; padding-block: 8px; }
+.rb-docpage .rb-spane .rb-psb > .rb-fitem:first-child { padding-top: 0; }
+.rb-docpage .rb-spane .rb-fih { min-height: 24px; .fx-icon-btn { width: 24px; height: 24px; } }
+.rb-docpage .rb-spane .rb-fitem .fx-check { margin-top: 2px; }
+.rb-docpage .rb-spane .rb-addrow { margin-top: 8px; }
+
+/* ---------- 22. Builder: header to panels (Gokul, 17 Nov: "why this much gap?") ----------
+   Was the header's 14px bottom padding + the work area's 24px: ~40px of empty band.
+   Now 16px between cards, the same as the report page uses. */
+.rb-bpage > .rb-work { padding-top: 16px; }
+.rb-bpage .rb-btop { padding-block: 10px; }
+/* Publish: the module checklist in two columns */
+.rb-modgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px;
+  .rb-mrow { margin: 0; padding: 7px 10px; align-items: center; } }
+@media (max-width: 599.98px) { .rb-modgrid { grid-template-columns: 1fr; min-width: 0; } }

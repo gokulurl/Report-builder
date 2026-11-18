@@ -1,21 +1,25 @@
-import { Component, computed, input, output, signal } from '@angular/core';
+import { Component, HostListener, computed, input, output, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RbStore } from './store';
 import { ENTITIES, MODULES, Template } from './engine';
-import { RbDialog, RbPop } from './ui';
+import { RbDialog, RbInfo, RbPop } from './ui';
+import { RbSideList } from './side-list';
 
 /** Publish a template to the modules whose staff should find it. Its own module is always included. */
 @Component({
   selector: 'rb-publish',
-  imports: [RbDialog],
+  imports: [RbDialog, RbInfo],
   template: `
     <rb-dialog [title]="'Publish ' + tpl().title" (closed)="closed.emit()">
-      <p class="muted tiny">Staff in these modules will find it in their reports. It always appears in {{ tpl().module }}, where its data comes from.</p>
+      <p class="muted tiny">Always in {{ tpl().module }}. <rb-info [text]="'Staff in the modules you tick find it in their reports. It always appears in ' + tpl().module + ', where its data comes from.'" /></p>
+      <!-- 11 modules: two columns, so the list is half as tall -->
+      <div class="rb-modgrid" role="group" aria-label="Modules">
       @for (m of modules; track m) {
         <label class="rb-mrow"><input type="checkbox" [checked]="picked().includes(m)" [disabled]="m === tpl().module" (change)="toggle(m)" /><b>{{ m }}</b></label>
       }
+      </div>
       <ng-container foot>
         <button class="fx-btn fx-btn-secondary" (click)="closed.emit()">Cancel</button>
         <button class="fx-btn fx-btn-primary" (click)="done.emit(picked())">Publish</button>
@@ -35,52 +39,58 @@ export class PublishDialog {
 /** IT home: every template, its status and where it is published. */
 @Component({
   selector: 'rb-templates',
-  imports: [MatIconModule, MatTooltipModule, RbDialog, RbPop, PublishDialog],
+  imports: [MatIconModule, MatTooltipModule, RbDialog, RbPop, PublishDialog, RbSideList, RbInfo],
   template: `
-    <div class="rb-page" [attr.data-rev]="s.rev()">
-      <div class="rb-dhead">
-        <div><h1>Templates</h1>
-          <p class="muted">A template is the shape of a report. Staff choose the period and their own filters each time they run it.</p></div>
-        <div class="rb-dhead-acts">
-          <label class="fx-check inline"><input type="checkbox" [checked]="showRemoved()" (change)="showRemoved.set(!showRemoved())" /> Show removed</label>
-          <button class="fx-btn fx-btn-primary" (click)="newOpen.set(true)"><mat-icon>add</mat-icon>New template</button>
+    <div class="hub-shell" [attr.data-rev]="s.rev()">
+      <rb-side-list />
+      <div class="hub-main">
+        <div class="desk-bar">
+          <div class="tabs" role="tablist" aria-label="Templates">
+            <button type="button" role="tab" aria-selected="true" class="has-work">Templates <span class="count">{{ list().length }}</span></button>
+          </div>
+          <div class="desk-bar-end">
+            <label class="fx-check inline"><input type="checkbox" [checked]="showRemoved()" (change)="showRemoved.set(!showRemoved())" /> Show removed</label>
+            <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="newOpen.set(true)" title="New template (Alt+N)" aria-keyshortcuts="Alt+N"><mat-icon>add</mat-icon><span><u>N</u>ew template</span></button>
+          </div>
         </div>
-      </div>
+        <div class="hub-work">
       <section class="fx-card rb-list">
         @for (t of list(); track t.id) {
           <div class="rb-row" [class.removed]="t.removed">
             <div class="rb-rmain">
               <div class="rb-rt static">{{ t.title }}
-                <span class="rb-tag" [class.ok]="t.status === 'published'" [class.mute]="t.status === 'draft'">{{ t.status === 'draft' ? 'Draft' : 'Published' }}</span>
-                @if (t.removed) { <span class="rb-tag mute">Removed</span> }
+                <span class="rb-tag status" [class.ok]="t.status === 'published'" [class.mute]="t.status === 'draft'">{{ t.status === 'draft' ? 'Draft' : 'Published' }}</span>
+                @if (t.removed) { <span class="rb-tag status mute">Removed</span> }
               </div>
               <div class="rb-rd">{{ t.desc }}</div>
-              <div class="rb-strip"><mat-icon>event</mat-icon><span>Period on {{ s.periodLabel(t) }}, chosen by staff@if (t.scope.length) {. Restricted to {{ s.scopeText(t) }}}</span></div>
+              <div class="rb-strip"><mat-icon>event</mat-icon><span>{{ s.periodLabel(t) }}@if (t.scope.length) { · {{ s.scopeText(t) }} only}</span></div>
             </div>
-            <div class="rb-rplace">@for (p of t.places; track p) { <span class="rb-pill">{{ p }}</span> }</div>
+            <div matTooltip="Modules whose staff can find and run this template" class="rb-rplace">@for (p of t.places; track p) { <span class="rb-pill">{{ p }}</span> }</div>
             <div class="rb-racts">
               @if (t.removed) {
                 <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="t.removed = false; s.bump()"><mat-icon>restore</mat-icon>Restore</button>
               } @else {
-                <a class="fx-btn fx-btn-secondary fx-btn-sm" href="/reports?view=tpl" target="_blank" rel="noopener" matTooltip="Opens the staff Dashboard in a new tab, to check how staff see it"><mat-icon>visibility</mat-icon>See in Dashboard</a>
+                <a class="fx-btn fx-btn-ghost fx-btn-sm" href="/reports?view=tpl" target="_blank" rel="noopener" matTooltip="Opens My reports in a new tab, as staff see it"><mat-icon>visibility</mat-icon>See in My reports</a>
                 <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="router.navigate(['/it/builder', t.id])"><mat-icon>edit</mat-icon>Edit</button>
-                <button class="fx-icon-btn" (click)="menu.set({ t, el: $any($event.currentTarget) })" aria-label="More actions" aria-haspopup="menu"><mat-icon>more_horiz</mat-icon></button>
+                <button matTooltip="Place in modules or remove" class="fx-icon-btn" (click)="menu.set({ t, el: $any($event.currentTarget) })" aria-label="More actions" aria-haspopup="menu"><mat-icon>more_horiz</mat-icon></button>
               }
             </div>
           </div>
         }
       </section>
+        </div>
+      </div>
     </div>
 
     @if (menu(); as m) {
       <rb-pop [anchor]="m.el" (closed)="menu.set(null)">
-        <button class="rb-mi" (click)="publishing.set(m.t); menu.set(null)"><mat-icon>ios_share</mat-icon>Place in modules</button>
+        <button class="rb-mi" (click)="publishing.set(m.t); menu.set(null)"><mat-icon [matTooltip]="m.t.status === 'draft' ? 'Publishes it to staff in the modules you pick' : ''">ios_share</mat-icon>Place in modules</button>
         <button class="rb-mi" (click)="removing.set(m.t); menu.set(null)"><mat-icon>delete_outline</mat-icon>Remove</button>
       </rb-pop>
     }
     @if (removing(); as t) {
       <rb-dialog [title]="'Remove ' + t.title + '?'" (closed)="removing.set(null)">
-        <p class="muted tiny">Staff can no longer start reports from it.@if (deps(t); as n) { {{ n.reps }} saved {{ n.reps === 1 ? 'report uses' : 'reports use' }} it@if (n.scheds) { and {{ n.scheds }} {{ n.scheds === 1 ? 'schedule stops' : 'schedules stop' }}}. }You can restore it from Show removed.</p>
+        <p class="muted tiny">Staff can't start new reports from it.@if (deps(t); as n) { {{ n.reps }} saved {{ n.reps === 1 ? 'report uses' : 'reports use' }} it@if (n.scheds) { and {{ n.scheds }} {{ n.scheds === 1 ? 'schedule stops' : 'schedules stop' }}}. }Restore from Show removed.</p>
         <ng-container foot><button class="fx-btn fx-btn-secondary" (click)="removing.set(null)">Cancel</button>
           <button class="fx-btn fx-btn-primary danger" (click)="remove(t)">Remove</button></ng-container>
       </rb-dialog>
@@ -90,12 +100,11 @@ export class PublishDialog {
     }
     @if (newOpen()) {
       <rb-dialog title="New template" (closed)="newOpen.set(false)">
-        <p class="muted tiny">Choose the module and the entity the report is built on.</p>
-        <label class="rb-flab">Module
+        <label class="rb-flab">Module <rb-info text="Where its data comes from. Once published, it always appears in this module" />
           <select class="rb-sel full" [value]="mod()" (change)="mod.set($any($event.target).value); ent.set(firstEntity())">
             @for (m of modules; track m) { <option>{{ m }}</option> }
           </select></label>
-        <div class="rb-flab">Entity</div>
+        <div class="rb-flab">Entity <rb-info text="What one row of the report is, for example an invoice or a service line." /></div>
         @for (e of entities(); track e.id) {
           <label class="rb-mrow" [class.off]="!e.sample">
             <input type="radio" name="ent" [checked]="ent() === e.id" [disabled]="!e.sample" (change)="ent.set(e.id)" />
@@ -124,6 +133,7 @@ export class RbTemplates {
 
   constructor(public s: RbStore, public router: Router, route: ActivatedRoute) {
     s.setRole('admin');
+    if (innerWidth < 1200) s.listFolded.set(true);   // medium window: the table is the list; fold the duplicate
     route.queryParamMap.subscribe((p) => { if (p.get('new')) { this.newOpen.set(true); router.navigate([], { queryParams: {}, replaceUrl: true }); } });
   }
   list = computed(() => { this.s.rev(); return this.s.templates.filter((t) => !t.removed || this.showRemoved()); });

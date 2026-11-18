@@ -5,7 +5,7 @@ import { Routes } from '@angular/router';
  * A report opens at /report/rep/:id (a saved report) or /report/tpl/:id (straight from a template, unsaved).
  */
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'reports' },
+  { path: '', pathMatch: 'full', redirectTo: 'fusion/billing/collections' },
   { path: 'reports', loadComponent: () => import('./rb/list').then((m) => m.RbList) },
   {
     path: 'report/:kind/:id', loadComponent: () => import('./rb/doc').then((m) => m.RbDoc),
@@ -14,6 +14,8 @@ export const routes: Routes = [
   },
   { path: 'it', loadComponent: () => import('./rb/templates').then((m) => m.RbTemplates) },
   { path: 'it/builder/:id', loadComponent: () => import('./rb/builder').then((m) => m.RbBuilder) },
+  // Stand-ins for the existing Fusion screens around the new ones (prototype only)
+  { path: 'fusion/:mod/:item', loadComponent: () => import('./fusion-screen').then((m) => m.FusionScreen) },
   { path: 'run/:kind/:id', redirectTo: 'report/:kind/:id' },
   { path: '**', redirectTo: 'reports' },
 ];

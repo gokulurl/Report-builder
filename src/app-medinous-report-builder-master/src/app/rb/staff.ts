@@ -143,6 +143,25 @@ export function docSentence(t: Template, d: Doc, noun: string) {
   return s + '.';
 }
 
+/** The Results header in two parts, built from the data (not cut from the sentence):
+ *  the period on its own line, and everything else for the (i). */
+export function docParts(t: Template, d: Doc): { dates: string; rest: string } {
+  const r = resolveRange(d.period);
+  const dates = r && r.from && r.to ? (+r.from === +r.to ? fdate(r.from) : fdate(r.from) + ' to ' + fdate(r.to)) : 'Choose a period';
+  const parts = d.clauses.filter((c) => !clauseErr(c)).map(clauseText);
+  const segs: string[] = [];
+  if (isSummary(t, d)) {
+    const per1 = (g: string) => { const c = colOf(g); return c.bucket ? `${c.bucket} (${c.label.replace(/ \(by \w+\)/, '')})` : c.label; };
+    const figs = sumMeasures(t, d).map((k) => (measMap(t)[k] === 'countd' && k === 'inv' ? 'the number of invoices' : measLabel(t, k).toLowerCase()));
+    segs.push(`One row per ${sumGroups(t, d).map(per1).join(', then per ')}, showing ${figs.join(' and ')}`);
+  }
+  if (parts.length) segs.push((segs.length ? 'where ' : 'Where ') + parts.join(', and '));
+  if (!isSummary(t, d) && d.groups.length) segs.push((segs.length ? 'grouped by ' : 'Grouped by ') + d.groups.map((x) => colOf(x).label).join(', then by '));
+  let rest = segs.length ? segs.join(', ') + '.' : '';
+  if (t.scope.length) rest += (rest ? ' ' : '') + 'Always limited to ' + t.scope.map((f) => colOf(f.col).label + ' ' + (f.vals || []).join(', ')).join('; ') + '.';
+  return { dates, rest };
+}
+
 export const groupable = () => CAT.filter((c) => c.grp);
 
 /** Columns staff may not hide: grouped by, used in a formula, or used for drill-through. */

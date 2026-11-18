@@ -1,4 +1,4 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, HostListener, computed, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { NgTemplateOutlet } from '@angular/common';
@@ -9,7 +9,9 @@ import {
   CAT, CalcCol, CalcOp, DFMT, ENTITIES, NFMT, OPNAME, OPS, PERIOD_GROUPS, PRESETS, Period, ROWS, Rule, SUMLBL, SWATCH, SumFn, Template,
   buildTable, chartModel, colOf, distinct, effective, isNum, rangeText, rowsFor,
 } from './engine';
-import { RbChart, RbPop, RbTable } from './ui';
+import { RbChart, RbInfo, RbPop, RbTable } from './ui';
+import { RbSideList } from './side-list';
+import { altLetter, overlayOpen } from './viewport';
 import { PublishDialog } from './templates';
 
 type Tab = 'cols' | 'group' | 'sort' | 'calc' | 'display' | 'settings';
@@ -17,34 +19,41 @@ type Tab = 'cols' | 'group' | 'sort' | 'calc' | 'display' | 'settings';
 /** IT builds the shape of a report. No data loads while building; Test run checks the shape on a sample. */
 @Component({
   selector: 'rb-builder',
-  imports: [NgTemplateOutlet, FormsModule, MatIconModule, MatTooltipModule, RbTable, RbChart, RbPop, PublishDialog],
+  imports: [NgTemplateOutlet, FormsModule, MatIconModule, MatTooltipModule, RbTable, RbChart, RbPop, PublishDialog, RbSideList, RbInfo],
   template: `
     @let D = d();
-    <div class="rb-page rb-bpage" [attr.data-rev]="s.rev()">
+    <div class="hub-shell" [attr.data-rev]="s.rev()"><rb-side-list [selected]="'tpl:' + D.id" />
+    <div class="hub-main rb-page rb-bpage">
       <section class="fx-card rb-btop">
+        <button class="fx-icon-btn rb-band-back" (click)="router.navigate(['/it'])" aria-label="Back to templates" title="Back to templates"><mat-icon>chevron_left</mat-icon></button>
+        <span class="rb-band-mark" aria-hidden="true"><mat-icon>table_chart</mat-icon></span>
         <div class="rb-btop-main">
-          <input class="rb-title-in" [class.bad]="titleErr()" [(ngModel)]="D.title" (ngModelChange)="titleErr.set('')" aria-label="Template title" maxlength="160" />
+          <!-- Looks editable at rest: a dashed underline and a pencil (Shrunkal, 17 Nov: "Untitled report" did not read as a name you can change) -->
+          <label class="rb-titlebox" matTooltip="Name staff see in their report list. Click to rename">
+            <input class="rb-title-in" [class.bad]="titleErr()" [(ngModel)]="D.title" (ngModelChange)="titleErr.set('')" (focus)="D.title.startsWith('Untitled') && selAll($any($event.target))" aria-label="Template name" maxlength="160" />
+            <mat-icon class="rb-title-pen" aria-hidden="true">edit</mat-icon>
+          </label>
           @if (titleErr()) { <div class="rb-ferr">{{ titleErr() }}</div> }
           <div class="rb-src"><span class="rb-pill">{{ D.module }}</span><mat-icon>chevron_right</mat-icon><b>{{ entity().name }}</b><span class="muted">{{ entity().row }}</span>
-            <span class="rb-tag" [class.ok]="D.status === 'published'" [class.mute]="D.status === 'draft'">{{ D.status === 'draft' ? 'Draft' : 'Published' }}</span></div>
+            <span class="rb-tag status" [class.ok]="D.status === 'published'" [class.mute]="D.status === 'draft'">{{ D.status === 'draft' ? 'Draft' : 'Published' }}</span></div>
         </div>
-        <button class="fx-btn fx-btn-secondary" (click)="testRun()"><mat-icon>play_arrow</mat-icon>Test run</button>
-        <button class="fx-btn fx-btn-secondary" (click)="save()"><mat-icon>save</mat-icon>Save</button>
-        <button class="fx-btn fx-btn-primary" (click)="publish()"><mat-icon>ios_share</mat-icon>Publish</button>
+        <button class="fx-btn fx-btn-secondary" (click)="testRun()" matTooltip="Preview the layout on sample data; nothing is saved (Alt+T)" aria-keyshortcuts="Alt+T"><mat-icon>play_arrow</mat-icon><span><u>T</u>est run</span></button>
+        <button class="fx-btn fx-btn-secondary" (click)="save()" [matTooltip]="D.status === 'draft' ? 'Saves the draft; staff cannot see it yet (Alt+S)' : 'Saves; staff get the changes straight away (Alt+S)'" aria-keyshortcuts="Alt+S"><mat-icon>save</mat-icon><span><u>S</u>ave</span></button>
+        <button class="fx-btn fx-btn-primary" (click)="publish()" matTooltip="Choose where staff find it, then publish (Alt+P)" aria-keyshortcuts="Alt+P"><mat-icon>ios_share</mat-icon><span><u>P</u>ublish</span></button>
       </section>
 
       <div class="rb-work">
         <section class="fx-card rb-panel">
           <div class="rb-tabs" role="tablist">
             @for (x of tabs(); track x[0]) {
-              <button role="tab" class="rb-tab" [class.on]="tab() === x[0]" [attr.aria-selected]="tab() === x[0]" (click)="tab.set(x[0])">{{ x[1] }}@if (x[2]) { <span class="cnt">{{ x[2] }}</span> }</button>
+              <button [matTooltip]="tabTip[x[0]]" role="tab" class="rb-tab" [class.on]="tab() === x[0]" [attr.aria-selected]="tab() === x[0]" (click)="tab.set(x[0])">{{ x[1] }}@if (x[2]) { <span class="cnt">{{ x[2] }}</span> }</button>
             }
           </div>
           <div class="rb-pbody" (input)="s.bump()" (change)="s.bump()">
             @switch (tab()) {
               @case ('cols') {
                 <div class="rb-sec">
-                  <div class="rb-sh">Columns staff get, in this order</div>
+                  <div class="rb-sh">Columns staff get, in this order <rb-info text="Staff can hide and reorder these, not add. Columns used for grouping, a formula or a link always stay." /></div>
                   @for (id of D.cols; track id; let i = $index; let last = $last) {
                     <div class="rb-item">
                       <div class="rb-nm"><span>{{ label(id) }}</span><ng-container *ngTemplateOutlet="badges; context: { $implicit: id }" /></div>
@@ -55,40 +64,42 @@ type Tab = 'cols' | 'group' | 'sort' | 'calc' | 'display' | 'settings';
                       } @else if (col(id).bucket) { <span class="muted tiny rb-bfmt">Shown as {{ bucketSample(id) }}</span> }
                       <button class="fx-icon-btn sm" (click)="move(D.cols, i, -1)" [disabled]="i === 0" aria-label="Move up"><mat-icon>arrow_upward</mat-icon></button>
                       <button class="fx-icon-btn sm" (click)="move(D.cols, i, 1)" [disabled]="last" aria-label="Move down"><mat-icon>arrow_downward</mat-icon></button>
-                      <button class="fx-icon-btn sm" (click)="removeCol(id)" [attr.aria-label]="'Remove ' + label(id)"><mat-icon>close</mat-icon></button>
+                      <button matTooltip="Remove, along with its grouping, totals, sorts, highlights and links" class="fx-icon-btn sm" (click)="removeCol(id)" [attr.aria-label]="'Remove ' + label(id)"><mat-icon>close</mat-icon></button>
                     </div>
-                  } @empty { <p class="rb-hint">No columns yet. Add them from the list below.</p> }
-                  <p class="rb-hint">Staff can hide and reorder these on their own reports, except columns used for grouping, a formula or a link. They can't add columns.</p>
+                  } @empty { <p class="rb-hint">None yet. Add from the list below.</p> }
                 </div>
                 <div class="rb-sec">
                   <div class="rb-sh">Add columns<span class="r muted tiny">{{ D.cols.length }} of {{ cat.length }} in the report</span></div>
                   <label class="fx-search"><mat-icon>search</mat-icon><input [(ngModel)]="colQ" [placeholder]="'Search ' + cat.length + ' columns'" aria-label="Search columns" /></label>
+                  <!-- Columns already in the report are listed above; here only when searching (Gokul: less scroll) -->
                   @for (c of catList(); track c.id) {
+                    @if (colQ || !D.cols.includes(c.id)) {
                     <div class="rb-fld">
-                      <div class="rb-fld-main"><div class="rb-nm"><span>{{ c.label }}</span><ng-container *ngTemplateOutlet="badges; context: { $implicit: c.id }" /></div><div class="muted tiny">{{ c.desc }}</div></div>
-                      <button class="rb-addb" [class.on]="D.cols.includes(c.id)" (click)="D.cols.includes(c.id) ? removeCol(c.id) : add(c.id)" [attr.aria-label]="(D.cols.includes(c.id) ? 'Remove ' : 'Add ') + c.label" [attr.aria-pressed]="D.cols.includes(c.id)">
+                      <div class="rb-fld-main"><div class="rb-nm"><span>{{ c.label }}</span><ng-container *ngTemplateOutlet="badges; context: { $implicit: c.id }" /></div><div class="muted tiny rb-fdesc" [matTooltip]="c.desc">{{ c.desc }}</div></div>
+                      <button [matTooltip]="D.cols.includes(c.id) ? 'In the report. Click to remove' : 'Add to the report'" class="rb-addb" [class.on]="D.cols.includes(c.id)" (click)="D.cols.includes(c.id) ? removeCol(c.id) : add(c.id)" [attr.aria-label]="(D.cols.includes(c.id) ? 'Remove ' : 'Add ') + c.label" [attr.aria-pressed]="D.cols.includes(c.id)">
                         <mat-icon>{{ D.cols.includes(c.id) ? 'check' : 'add' }}</mat-icon></button>
                     </div>
+                    }
                   } @empty { <p class="rb-hint">No columns match “{{ colQ }}”.</p> }
                 </div>
               }
               @case ('group') {
                 <div class="rb-sec">
-                  <div class="rb-sh">Group rows by</div>
+                  <div class="rb-sh">Group rows by<span class="r muted tiny">up to 3</span></div>
                   @for (g of D.groups; track g; let i = $index) {
                     <div class="rb-item" [style.margin-left.px]="i * 16">
                       <span class="muted tiny rb-lvl">{{ i + 1 }}</span><div class="rb-nm"><b>{{ label(g) }}</b></div>
                       <button class="fx-icon-btn sm" (click)="move(D.groups, i, -1); D.collapsed = []" [disabled]="i === 0" aria-label="Move up"><mat-icon>arrow_upward</mat-icon></button>
-                      <button class="fx-icon-btn sm" (click)="D.groups.splice(i, 1); D.collapsed = []; s.bump()" [attr.aria-label]="'Stop grouping by ' + label(g)"><mat-icon>close</mat-icon></button>
+                      <button [matTooltip]="'Stop grouping by ' + label(g) + '; the column stays'" class="fx-icon-btn sm" (click)="D.groups.splice(i, 1); D.collapsed = []; s.bump()" [attr.aria-label]="'Stop grouping by ' + label(g)"><mat-icon>close</mat-icon></button>
                     </div>
                   } @empty { <p class="rb-hint">Not grouped.</p> }
-                  @if (D.groups.length < 3) { <button class="fx-link" (click)="pop.set({ kind: 'group', el: $any($event.currentTarget) })"><mat-icon>add</mat-icon>Add group</button> <span class="muted tiny">up to 3</span> }
+                  @if (D.groups.length < 3) { <button class="fx-link" (click)="pop.set({ kind: 'group', el: $any($event.currentTarget) })"><mat-icon>add</mat-icon>Add group</button> }
                 </div>
                 <div class="rb-sec">
-                  <div class="rb-sh">Totals for each group<span class="r muted tiny">shown on subtotal and grand total rows</span></div>
-                  @if (!D.groups.length) { <p class="rb-hint">Add a group first. Totals appear under each group.</p> }
+                  <div class="rb-sh">Totals for each group <rb-info text="Shown on the subtotal and grand total rows." /></div>
+                  @if (!D.groups.length) { <p class="rb-hint">Add a group first.</p> }
                   @else {
-                  @if (!totalled()) { <div class="fx-outdated rb-warnbox"><mat-icon>warning</mat-icon><span>Nothing is totalled yet, so the total rows are empty. Choose Total, Count or another option for at least one column.</span></div> }
+                  @if (!totalled()) { <div class="fx-outdated rb-warnbox"><mat-icon>warning</mat-icon><span>Nothing totalled yet. Set Total or Count on a column.</span></div> }
                   @for (id of nonGrouped(); track id) {
                     <div class="rb-item">
                       <div class="rb-nm">{{ label(id) }}</div>
@@ -103,7 +114,7 @@ type Tab = 'cols' | 'group' | 'sort' | 'calc' | 'display' | 'settings';
                 <div class="rb-sec">
                   <div class="rb-sh">Show</div>
                   <label class="fx-switch rb-opt"><input type="checkbox" [ngModel]="!D.show.detail" (ngModelChange)="D.show.detail = !$event; s.bump()" /><span class="fx-switch-track"></span>
-                    <span><b>Totals only</b><br /><span class="muted tiny">Staff never see individual lines. Leave off unless lines must stay hidden; staff can already choose a summary themselves</span></span></label>
+                    <span><b>Totals only</b><br /><span class="muted tiny">Hides individual lines from staff <rb-info text="Leave off unless lines must stay hidden. Staff can already choose a summary themselves." /></span></span></label>
                   @for (o of showOpts; track o[0]) {
                     <label class="fx-switch rb-opt"><input type="checkbox" [(ngModel)]="$any(D.show)[o[0]]" (ngModelChange)="s.bump()" /><span class="fx-switch-track"></span>
                       <span><b>{{ o[1] }}</b><br /><span class="muted tiny">{{ o[2] }}</span></span></label>
@@ -113,7 +124,7 @@ type Tab = 'cols' | 'group' | 'sort' | 'calc' | 'display' | 'settings';
               }
               @case ('sort') {
                 <div class="rb-sec">
-                  <div class="rb-sh">Default sort order<span class="r muted tiny">up to 3 levels</span></div>
+                  <div class="rb-sh">Default sort order <rb-info text="Staff can re-sort before running, and re-sort the result without running again." /><span class="r muted tiny">up to 3 levels</span></div>
                   @for (so of D.sorts; track $index; let i = $index) {
                     <div class="rb-item">
                       <span class="muted tiny rb-sortlab">{{ sortLabels[i] }}</span>
@@ -123,7 +134,6 @@ type Tab = 'cols' | 'group' | 'sort' | 'calc' | 'display' | 'settings';
                     </div>
                   } @empty { <p class="rb-hint">Rows come in data set order.</p> }
                   @if (D.sorts.length < 3 && D.cols.length) { <button class="fx-link" (click)="addSort()"><mat-icon>add</mat-icon>Add sort level</button> }
-                  <p class="rb-hint">Staff can choose their own sort before running, and re-sort the result afterwards without running again.</p>
                 </div>
               }
               @case ('calc') {
@@ -135,26 +145,24 @@ type Tab = 'cols' | 'group' | 'sort' | 'calc' | 'display' | 'settings';
                   } @empty { <p class="rb-hint">None yet.</p> }
                 </div>
                 <div class="rb-sec">
-                  <div class="rb-sh">New formula column</div>
+                  <div class="rb-sh">New formula column <rb-info text="On total rows, divide and percent are worked out from the totals, never averaged." /></div>
                   <input class="rb-inp full" [(ngModel)]="k.name" placeholder="Name, for example Discount rate" aria-label="Formula column name" />
                   <select class="rb-sel full" [(ngModel)]="k.a" aria-label="First value">@for (c of numCols(); track c.id) { <option [value]="c.id">{{ c.label }}</option> }</select>
-                  <div class="fx-seg rb-ops">@for (o of opNames; track o[0]) { <button [class.on]="k.op === o[0]" (click)="k.op = o[0]">{{ o[1] }}</button> }</div>
+                  <div class="fx-seg rb-ops">@for (o of opNames; track o[0]) { <button [class.on]="k.op === o[0]" [matTooltip]="opTip[o[0]]" (click)="k.op = o[0]">{{ o[1] }}</button> }</div>
                   <select class="rb-sel full" [(ngModel)]="k.b" aria-label="Second value">@for (c of numCols(); track c.id) { <option [value]="c.id">{{ c.label }}</option> }</select>
-                  <p class="rb-hint">On total rows, divide and percent are recalculated from the totals, never averaged.</p>
                   @if (kErr()) { <div class="rb-ferr">{{ kErr() }}</div> }
-                  <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="addCalc()"><mat-icon>add</mat-icon>Add column</button>
+                  <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="addCalc()"><mat-icon>add</mat-icon>Add column</button>
                 </div>
                 <div class="rb-sec">
-                  <div class="rb-sh">Join text columns</div>
+                  <div class="rb-sh">Join text columns <rb-info text="For example patient name and ID. A joined column is text: it can be grouped and filtered, not totalled." /></div>
                   <input class="rb-inp full" [(ngModel)]="j.name" placeholder="Name, for example Patient" aria-label="Name of the joined column" />
                   <div class="rb-hlrow">
                     <label class="rb-flab grow">First<select class="rb-sel" [(ngModel)]="j.a">@for (c of textCols2; track c.id) { <option [value]="c.id">{{ c.label }}</option> }</select></label>
                     <label class="rb-flab rb-sepf">Separator<input class="rb-inp" [(ngModel)]="j.sep" aria-label="Separator" /></label>
                     <label class="rb-flab grow">Then<select class="rb-sel" [(ngModel)]="j.b">@for (c of textCols2; track c.id) { <option [value]="c.id">{{ c.label }}</option> }</select></label>
                   </div>
-                  <p class="rb-hint">For example patient name and ID as one column. A joined column is text: it can be grouped and filtered, not totalled.</p>
                   @if (jErr()) { <div class="rb-ferr">{{ jErr() }}</div> }
-                  <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="addJoin()"><mat-icon>add</mat-icon>Add joined column</button>
+                  <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="addJoin()"><mat-icon>add</mat-icon>Add joined column</button>
                 </div>
               }
               @case ('display') {
@@ -171,7 +179,7 @@ type Tab = 'cols' | 'group' | 'sort' | 'calc' | 'display' | 'settings';
                   <div class="rb-sec">
                     <div class="rb-sh">Chart</div>
                     <span class="fx-seg">@for (m of chartTypes; track m[0]) { <button [class.on]="D.display.type === m[0]" (click)="D.display.type = $any(m[0]); s.bump()">{{ m[1] }}</button> }</span>
-                    <label class="rb-flab">Label column
+                    <label class="rb-flab">Label column <rb-info text="Its values name each bar, point or slice" />
                       <select class="rb-sel full" [(ngModel)]="D.display.label" (ngModelChange)="s.bump()"><option value="">Choose</option>@for (id of labelCols(); track id) { <option [value]="id">{{ label(id) }}</option> }</select></label>
                     <div class="rb-flab">Values</div>
                     @for (id of valueCols(); track id) {
@@ -186,7 +194,10 @@ type Tab = 'cols' | 'group' | 'sort' | 'calc' | 'display' | 'settings';
                       <div class="rb-nm tiny">{{ label(r.col) }} {{ ruleOp[r.op] }} {{ r.op === 'before' || r.op === 'after' ? r.a.split('-').reverse().join('/') : r.a }}<span class="muted"> · {{ appliesText[r.applies] }}</span></div>
                       <button class="fx-icon-btn sm" (click)="removeRule(r)" aria-label="Remove rule"><mat-icon>close</mat-icon></button></div>
                   }
-                  @if (D.cols.length) {
+                  @if (D.cols.length && !hlOpen()) {
+                    <!-- The rule form opens on demand: 366px of form for a rarely used setting was most of Display's scroll -->
+                    <button class="fx-link" (click)="hlOpen.set(true)"><mat-icon>add</mat-icon>Add highlight rule</button>
+                  } @else if (D.cols.length) {
                   <div class="rb-hlf">
                     <div class="rb-hlrow">
                       <label class="rb-flab grow">When<select class="rb-sel" [ngModel]="rf.col" (ngModelChange)="setRuleCol($event)">@for (id of D.cols; track id) { <option [value]="id">{{ label(id) }}</option> }</select></label>
@@ -211,14 +222,15 @@ type Tab = 'cols' | 'group' | 'sort' | 'calc' | 'display' | 'settings';
                     </div>
                     <div class="rb-hlrow rb-hlend">
                       <label class="rb-flab">Apply to<select class="rb-sel" [(ngModel)]="rf.applies"><option value="detail">Lines</option><option value="summary">Total rows</option><option value="both">Lines and totals</option></select></label>
-                      <button class="fx-btn fx-btn-primary fx-btn-sm" (click)="addRule()"><mat-icon>add</mat-icon>Add rule</button>
+                      <button class="fx-btn fx-btn-ghost fx-btn-sm" (click)="hlOpen.set(false); rErr.set('')">Cancel</button>
+                      <button class="fx-btn fx-btn-secondary fx-btn-sm" (click)="addRule()"><mat-icon>add</mat-icon>Add rule</button>
                     </div>
                   </div>
                   } @else { <p class="muted tiny">Add columns first.</p> }
                   @if (rErr()) { <div class="rb-ferr">{{ rErr() }}</div> }
                 </div>
                 <div class="rb-sec">
-                  <div class="rb-sh">Drill-through</div>
+                  <div class="rb-sh">Drill-through <rb-info text="Staff click a value in this column to open the linked report, filtered to that value, for the same period." /></div>
                   @for (x of D.drill; track $index; let i = $index) {
                     <div class="rb-item"><mat-icon class="sm accent">link</mat-icon><div class="rb-nm tiny"><b>{{ label(x.col) }}</b> opens {{ s.tpl(x.target).title }}</div>
                       <button class="fx-icon-btn sm" (click)="D.drill.splice(i, 1); s.bump()" aria-label="Remove link"><mat-icon>close</mat-icon></button></div>
@@ -229,27 +241,25 @@ type Tab = 'cols' | 'group' | 'sort' | 'calc' | 'display' | 'settings';
                     <select class="rb-sel" [(ngModel)]="dr.col" aria-label="Column">@for (id of drillCols(); track id) { <option [value]="id">{{ label(id) }}</option> }</select>
                     <span class="muted tiny">opens</span>
                     <select class="rb-sel grow" [(ngModel)]="dr.target" aria-label="Report it opens"><option value="" disabled>Choose a report</option>@for (t of drillTargets(); track t.id) { <option [value]="t.id">{{ t.title }}</option> }</select>
-                    <button class="fx-btn fx-btn-primary fx-btn-sm" [disabled]="!dr.col || !dr.target" (click)="addDrill()"><mat-icon>add</mat-icon>Add link</button>
+                    <button class="fx-btn fx-btn-secondary fx-btn-sm" [disabled]="!dr.col || !dr.target" (click)="addDrill()"><mat-icon>add</mat-icon>Add link</button>
                   </div>
-                  <p class="rb-hint">The linked report opens filtered to the clicked value, for the same period.</p>
                 </div>
               }
               @case ('settings') {
                 <div class="rb-sec">
-                  <div class="rb-sh">Period</div>
-                  <p class="muted tiny">Staff choose it when they run the report. It applies to <b>{{ s.periodLabel(D) }}</b> and starts at {{ presets[s.ds(D).defaultPeriod.preset] }}.</p>
+                  <div class="rb-sh">Period <rb-info text="Staff pick the period when they run the report. It starts at the default." /></div>
+                  <p class="muted tiny">On <b>{{ s.periodLabel(D) }}</b> · default {{ presets[s.ds(D).defaultPeriod.preset] }}</p>
                 </div>
                 @if (D.scope.length) {
                   <div class="rb-sec">
-                    <div class="rb-sh">Restriction<span class="r muted tiny">editing comes in phase 2</span></div>
+                    <div class="rb-sh">Restriction <rb-info text="Every run is limited to these rows; staff cannot remove it" /><span class="r muted tiny">editing comes in phase 2</span></div>
                     <p class="muted tiny rb-lockp"><mat-icon class="xs">lock</mat-icon> Always limited to {{ s.scopeText(D) }}.</p>
                   </div>
                 }
                 <div class="rb-sec">
-                  <div class="rb-sh">Results</div>
+                  <div class="rb-sh">Results <rb-info text="Running again with the same period and filters inside this time shows the saved result instead of running again." /></div>
                   <div class="rb-prow"><span class="rb-plab wide">Results stay valid for</span>
                     <select class="rb-sel" [(ngModel)]="D.expiry">@for (m of expiries; track m) { <option [ngValue]="m">{{ expiryText(m) }}</option> }</select></div>
-                  <p class="rb-hint">Running again with the same values within this time reuses the result.</p>
                   <label class="fx-switch rb-opt"><input type="checkbox" [(ngModel)]="D.heavy" /><span class="fx-switch-track"></span>
                     <span><b>Large report</b><br /><span class="muted tiny">Warns staff it may run in the background</span></span></label>
                 </div>
@@ -266,13 +276,13 @@ type Tab = 'cols' | 'group' | 'sort' | 'calc' | 'display' | 'settings';
           @if (test(); as ts) {
             <div class="rb-prevh">
               <h2>Test run</h2>
-              <span class="muted tiny">First {{ testRows().length }} of {{ testAll().length.toLocaleString() }} lines for {{ rangeText(testPeriod(), true) }}. Totals cover this sample only. Run {{ ts.at }}.</span>
-              <span class="rb-prevh-r"><span class="muted tiny">Sample period, not saved</span>
+              <span class="muted tiny">{{ testRows().length }} of {{ testAll().length.toLocaleString() }} lines · sample totals · {{ ts.at }} <rb-info text="Totals cover this sample only. The sample period is for testing and is not saved." /></span>
+              <span class="rb-prevh-r">
                 <select class="rb-sel" [ngModel]="testPeriod().preset" (ngModelChange)="testPeriod.set({ preset: $event }); testRun()" aria-label="Sample period">
                   @for (g of periodGroups; track g[0]) { <optgroup [label]="g[0]">@for (k of g[1]; track k) { <option [value]="k">{{ presets[k] }}</option> }</optgroup> }
                 </select></span>
             </div>
-            @if (stale()) { <div class="fx-outdated"><mat-icon>warning</mat-icon><span>The template has changed since this test. Click Test run to refresh it.</span></div> }
+            @if (stale()) { <div class="fx-outdated"><mat-icon>warning</mat-icon><span>Changed since this test. Test run again to refresh.</span></div> }
             @if (D.scope.length) { <div class="rb-chips">@for (f of D.scope; track f.id) { <span class="rb-chip lock"><mat-icon>lock</mat-icon>{{ label(f.col) }} is {{ (f.vals || []).join(', ') }}</span> }</div> }
             <div class="rb-pvbody">
               @if (D.display.mode !== 'table') { <rb-chart [model]="testChart()" /> }
@@ -286,17 +296,17 @@ type Tab = 'cols' | 'group' | 'sort' | 'calc' | 'display' | 'settings';
             <div class="rb-empty narrow">
               <mat-icon class="big">table_view</mat-icon>
               <b>No data loads while you build</b>A template is the shape of a report: columns, grouping, totals and layout. Staff choose the period and filters when they run it. Use Test run to check the shape against a small sample.
-              <div class="rb-btnrow center"><button class="fx-btn fx-btn-primary" (click)="testRun()"><mat-icon>play_arrow</mat-icon>Test run</button></div>
+              <div class="rb-btnrow center"><button class="fx-btn fx-btn-secondary" (click)="testRun()"><mat-icon>play_arrow</mat-icon>Test run</button></div>
             </div>
           }
         </section>
       </div>
-    </div>
+    </div></div>
 
     <ng-template #badges let-id>
       @let c = col(id);
       @if (c.rel) { <span class="rb-mk rel" matTooltip="From related data, one value per row">Related</span> }
-      @if (c.type === 'calc') { <span class="rb-mk calc">Formula</span> }
+      @if (c.type === 'calc') { <span matTooltip="Calculated from other columns; see the Formulas tab" class="rb-mk calc">Formula</span> }
       @if (c.restricted) { <span class="rb-mk res" matTooltip="Exporting it asks staff for a reason">Restricted</span> }
     </ng-template>
 
@@ -335,6 +345,10 @@ export class RbBuilder {
   cat = CAT; presets = PRESETS; periodGroups = PERIOD_GROUPS; rangeText = rangeText; sumLbl = SUMLBL; ops = OPS; swatch = SWATCH;
   swatchKeys = Object.keys(SWATCH);
   opNames = Object.entries(OPNAME) as [CalcOp, string][];
+  /** What each formula operator does; the order of the two values matters for minus, divide and percent. */
+  /** What lives on each builder tab, for the hover over its name. */
+  tabTip: Record<string, string> = { cols: 'Columns staff get', group: 'Grouping and totals', sort: 'Default row order', calc: 'Formula and joined columns', display: 'Layout, chart, highlights and links', settings: 'Period, restriction, result reuse, description' };
+  opTip: Record<string, string> = { add: 'First value plus second', sub: 'First value minus second', mul: 'First value times second', div: 'First value divided by second', pct: 'First value as a percent of second' };
   chartTypes = [['bar', 'Bar'], ['line', 'Line'], ['pie', 'Pie'], ['doughnut', 'Doughnut']];
   ruleOp: Record<string, string> = { gt: 'more than', lt: 'less than', eq: 'equals', between: 'between', contains: 'contains', is: 'is', isnot: 'is not', before: 'before', after: 'after' };
   appliesText: Record<string, string> = { detail: 'lines', summary: 'total rows', both: 'lines and totals' };
@@ -362,7 +376,9 @@ export class RbBuilder {
   dr = { col: '', target: '' };
   publishing = signal(false);
 
-  constructor(public s: RbStore, private router: Router, route: ActivatedRoute) {
+  constructor(public s: RbStore, public router: Router, route: ActivatedRoute) {
+    // Registration's rule: something opened on a window under 1200px folds the list to its rail
+    if (innerWidth < 1200) s.listFolded.set(true);
     s.setRole('admin');
     route.paramMap.subscribe((p) => {
       const id = p.get('id')!;
@@ -460,8 +476,10 @@ export class RbBuilder {
     if (!this.ruleOps().some((o) => o[0] === this.rf.op)) this.rf.op = this.ruleOps()[0][0] as Rule['op'];
     if (!a) { this.rErr.set(k === 'text' && this.rf.op !== 'contains' ? 'Choose a value' : k === 'date' ? 'Choose a date' : 'Enter a value'); return; }
     if (k === 'num' && isNaN(parseFloat(a))) { this.rErr.set('Enter a number, for example 500'); return; }
-    this.d().rules.push({ id: nextRuleId(), ...this.rf, a }); this.rf.a = ''; this.rErr.set(''); this.s.bump(); this.s.toast('Rule added');
+    this.d().rules.push({ id: nextRuleId(), ...this.rf, a }); this.rf.a = ''; this.rErr.set(''); this.hlOpen.set(false); this.s.bump(); this.s.toast('Rule added');
   }
+  /** The highlight rule form, open only while adding one. */
+  hlOpen = signal(false);
   removeRule(r: Rule) { const D = this.d(); D.rules = D.rules.filter((x) => x !== r); this.s.bump(); }
   addDrill() {
     this.d().drill = [...this.d().drill.filter((x) => x.col !== this.dr.col), { ...this.dr }];
@@ -479,6 +497,9 @@ export class RbBuilder {
   }
   toggleScopeVal(v: string) { this.scopeVals.update((x) => (x.includes(v) ? x.filter((y) => y !== v) : [...x, v])); }
   addScope(col: string) { if (this.scopeVals().length) this.d().scope.push({ id: nextFilterId(), col, op: 'in', vals: this.scopeVals(), fixed: true }); this.pop.set(null); this.s.bump(); }
+
+  /** Select a new "Untitled" name to type over. Deferred: on a mouse click the mouseup would undo it. */
+  selAll(el: HTMLInputElement) { setTimeout(() => el.select()); }
 
   /* ---------- test run ---------- */
   private snap() { const { collapsed, widths, wrap, pins, title, desc, status, edited, places, expiry, heavy, ...o } = this.d() as any; return JSON.stringify(o); }
@@ -504,6 +525,12 @@ export class RbBuilder {
   private commit() { const { collapsed, ...t } = this.d(); this.s.saveTemplate(t as Template); }
   save() { if (!this.valid()) return; this.commit(); this.s.toast('Template saved'); if (this.router.url.endsWith('/new')) this.router.navigate(['/it/builder', this.d().id], { replaceUrl: true }); }
   publish() { if (this.valid()) this.publishing.set(true); }
+  /** Alt+T test run, Alt+S save, Alt+P publish: the letters underlined in the header. */
+  @HostListener('document:keydown', ['$event']) onKey(e: KeyboardEvent) {
+    const k = altLetter(e); if (!k || overlayOpen()) return;
+    const act: Record<string, () => void> = { t: () => this.testRun(), s: () => this.save(), p: () => this.publish() };
+    if (act[k]) { e.preventDefault(); act[k](); }
+  }
   published(places: string[]) {
     const D = this.d(); D.places = places; D.status = 'published'; this.commit(); this.publishing.set(false);
     this.s.toast('Published to ' + places.join(', ').replace(/, ([^,]*)$/, ' and $1'));

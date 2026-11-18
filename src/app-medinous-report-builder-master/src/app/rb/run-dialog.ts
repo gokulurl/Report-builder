@@ -1,11 +1,13 @@
-import { Component, computed, input, output, signal } from '@angular/core';
+import { Component, HostListener, computed, input, output, signal } from '@angular/core';
+import { altLetter } from './viewport';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { Clause, MyReport, Period, Template, colOf, distinct, periodErr } from './engine';
 import { clauseErr, fromConds, isAmount, isLockSum } from './staff';
 import { RbStore } from './store';
-import { RbDialog } from './ui';
+import { RbDialog, RbInfo } from './ui';
 import { RbPeriod } from './dialogs';
 
 const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
@@ -13,10 +15,9 @@ const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
 /** Run from the list: check the values, then view on screen or download. */
 @Component({
   selector: 'rb-run',
-  imports: [FormsModule, MatIconModule, RbDialog, RbPeriod],
+  imports: [FormsModule, MatIconModule, MatTooltipModule, RbDialog, RbPeriod, RbInfo],
   template: `
     <rb-dialog [title]="'Run ' + name()" [width]="640" (closed)="closed.emit()">
-      <p class="muted tiny">Check the values, then choose how you want the report. Large reports are prepared in the background and you are notified when the file is ready.</p>
       @if (!lock()) {
         <section class="rb-rsec"><div class="rb-rlab"><mat-icon>view_agenda</mat-icon>Show as</div>
           <div class="rb-vseg" role="radiogroup" aria-label="Show as">
@@ -41,22 +42,22 @@ const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
               @let vals = values(c.field);
               <div class="rb-rchips" role="group" [attr.aria-label]="label(c.field) + ' values'">
                 @for (v of vals.slice(0, 12); track v[0]) {
-                  <button class="rb-rchip" [class.on]="c.vals.includes(v[0])" [attr.aria-pressed]="c.vals.includes(v[0])" (click)="toggle(c, v[0])">@if (c.vals.includes(v[0])) { <mat-icon>check</mat-icon> }{{ v[0] }} <span class="muted">{{ v[1] }}</span></button>
+                  <button [matTooltip]="v[1] + ' lines in all data, not just this period'" class="rb-rchip" [class.on]="c.vals.includes(v[0])" [attr.aria-pressed]="c.vals.includes(v[0])" (click)="toggle(c, v[0])">@if (c.vals.includes(v[0])) { <mat-icon>check</mat-icon> }{{ v[0] }} <span class="muted">{{ v[1] }}</span></button>
                 }
                 @if (vals.length > 12) { <span class="muted tiny">{{ vals.length - 12 }} more in View/Edit</span> }
               </div>
             }
           </div>
-        } @empty { <p class="muted tiny">No filters. Every line in the period is included. To add filters, use View/Edit.</p> }
+        } @empty { <p class="muted tiny">No filters <rb-info text="Every line in the period is included. To add filters, use View/Edit." /></p> }
       </section>
-      @if (own()) { <label class="fx-check inline rb-rkeep"><input type="checkbox" [(ngModel)]="keep" />Keep these values for next time</label> }
+      @if (own()) { <label class="fx-check inline rb-rkeep"><input type="checkbox" [(ngModel)]="keep" />Keep these values for next time <rb-info text="Saves the period, filters and view to this report. Schedules use them too" /></label> }
       @if (err()) { <div class="rb-ferr" role="alert">{{ err() }}</div> }
       <ng-container foot>
         <div class="rb-rbtns">
           <button class="fx-btn fx-btn-secondary" (click)="closed.emit()">Cancel</button>
-          <button class="fx-btn fx-btn-secondary" (click)="viewOnScreen()"><mat-icon>open_in_new</mat-icon>View on screen</button>
-          <span class="rb-rdl"><span class="muted tiny">Download</span>
-            @for (f of downloads; track f[0]) { <button class="fx-btn fx-btn-primary" (click)="download(f[0])"><mat-icon>{{ f[1] }}</mat-icon>{{ f[2] }}</button> }
+          <button class="fx-btn fx-btn-primary" (click)="viewOnScreen()" title="View on screen (Alt+V)" aria-keyshortcuts="Alt+V"><mat-icon>open_in_new</mat-icon><span><u>V</u>iew on screen</span></button>
+          <span class="rb-rdl"><span class="muted tiny">Download <rb-info text="Large reports are prepared in the background. You get a notification when the file is ready." /></span>
+            @for (f of downloads; track f[0]) { <button class="fx-btn fx-btn-secondary" (click)="download(f[0])" [title]="f[2] + ' (Alt+' + f[3].toUpperCase() + ')'" [attr.aria-keyshortcuts]="'Alt+' + f[3].toUpperCase()"><mat-icon>{{ f[1] }}</mat-icon><span>{{ f[2].slice(0, f[2].toLowerCase().indexOf(f[3])) }}<u>{{ f[2].charAt(f[2].toLowerCase().indexOf(f[3])) }}</u>{{ f[2].slice(f[2].toLowerCase().indexOf(f[3]) + 1) }}</span></button> }
           </span>
         </div>
       </ng-container>
@@ -66,7 +67,13 @@ export class RunDialog {
   report = input<MyReport | null>(null);
   tplId = input<string>('');
   closed = output();
-  downloads: [string, string, string][] = [['pdf', 'picture_as_pdf', 'PDF'], ['xlsx', 'grid_on', 'Excel'], ['csv', 'description', 'CSV']];
+  /** Alt+V view on screen; Alt+P, Alt+X, Alt+C download PDF, Excel, CSV: the letters underlined in the footer. */
+  @HostListener('document:keydown', ['$event']) onKey(e: KeyboardEvent) {
+    const k = altLetter(e); if (!k) return;
+    const f = this.downloads.find((x) => x[3] === k);
+    if (k === 'v') { e.preventDefault(); this.viewOnScreen(); } else if (f) { e.preventDefault(); this.download(f[0]); }
+  }
+  downloads: [string, string, string, string][] = [['pdf', 'picture_as_pdf', 'PDF', 'p'], ['xlsx', 'grid_on', 'Excel', 'x'], ['csv', 'description', 'CSV', 'c']];
 
   tpl = computed<Template>(() => this.s.tpl(this.report()?.tid || this.tplId()));
   name = computed(() => this.report()?.name || this.tpl().title);

@@ -1,42 +1,98 @@
-<header class="fx-appbar" [attr.data-rev]="s.rev()">
-  <div class="fx-brand"><img src="medinous-logo.svg" alt="Medinous" width="124" height="25" /></div>
-  <h4 class="fx-appbar-title">{{ title() }}</h4>
-  <span class="spacer"></span>
-  <span class="fx-appbar-ctx">Medinous QA Clinic · Signed in as {{ s.role() === 'admin' ? 'IT administrator' : 'billing staff' }}</span>
-  <button class="fx-icon-btn fx-bell" (click)="bell.set($any($event.currentTarget))"
-          [attr.aria-label]="unread() ? unread() + ' new notifications' : 'Notifications'" aria-haspopup="menu">
-    <mat-icon>notifications_none</mat-icon>
-    @if (unread()) { <span class="fx-bell-dot">{{ unread() }}</span> }
+<!-- The Fusion shell, as the live product has it. Only the content area (page-host) is the new UI. -->
+<header class="fz-bar" [attr.data-rev]="s.rev()">
+  <a class="fz-logo" routerLink="/fusion/billing/collections" aria-label="Medinous home"><img src="fusion/logo_header.svg" alt="medinous" /></a>
+  <div class="fz-hosp">
+    <h4>MEDINOUS QA CLINIC</h4><span class="fz-sep" aria-hidden="true"></span><h5>GENERAL PRACTICE</h5>
+  </div>
+  <span class="fz-spacer"></span>
+  <button type="button" class="fz-lang" (click)="langPop.set($any($event.currentTarget))" aria-haspopup="listbox" aria-label="Language">
+    <span class="grow">{{ current().label }}</span><span class="fz-x" aria-hidden="true">×</span><span class="fz-caret" aria-hidden="true"></span>
   </button>
-  <button class="fx-avatar" (click)="who.set($any($event.currentTarget))" aria-haspopup="menu" aria-label="Account">{{ s.role() === 'admin' ? 'IT' : 'GM' }}</button>
+  <div class="fz-icons">
+    <button type="button" class="fz-av" (click)="mods.set($any($event.currentTarget))" aria-haspopup="menu" aria-label="Switch module" matTooltip="Switch module">
+      <img src="fusion/switch-module-more.svg" alt="" />
+    </button>
+    <!-- Added to the app bar: background runs and scheduled deliveries notify here (PRD B9) -->
+    <button type="button" class="fz-av" (click)="bell.set($any($event.currentTarget))" aria-haspopup="menu"
+            [attr.aria-label]="unread() ? unread() + ' new notifications' : 'Notifications'" matTooltip="Notifications">
+      <img src="fusion/bell.svg" alt="" />
+      @if (unread()) { <span class="fz-count">{{ unread() }}</span> }
+    </button>
+    <button type="button" class="fz-av" (click)="help.set($any($event.currentTarget))" aria-haspopup="menu" aria-label="Help" matTooltip="Help">
+      <img src="fusion/help.svg" alt="" />
+    </button>
+    <button type="button" class="fz-prof" (click)="who.set($any($event.currentTarget))" aria-haspopup="menu" aria-label="Profile">
+      <img class="fz-face" src="fusion/avatar.svg" alt="" /><img class="fz-arrow" src="fusion/arrow.svg" alt="" />
+    </button>
+  </div>
 </header>
 
-<div class="fx-body">
-  <nav class="fx-rail" aria-label="Reports sections">
-    @if (s.role() === 'admin') {
-      <a class="fx-rail-item" routerLink="/it" [class.active]="section() === 'dash'"><mat-icon>dashboard</mat-icon><span>Dashboard</span></a>
-      <a class="fx-rail-item" routerLink="/it/builder/new" [class.active]="section() === 'builder'"><mat-icon>query_stats</mat-icon><span>Report builder</span></a>
-    } @else {
-      <a class="fx-rail-item" routerLink="/reports" [class.active]="section() === 'dash'"><mat-icon>dashboard</mat-icon><span>Dashboard</span></a>
+<div class="fz-body">
+  <nav class="fz-rail" [attr.aria-label]="module()">
+    @for (i of rail(); track i.key) {
+      <a class="fz-item" [routerLink]="i.path" [class.on]="active() === i.key" [attr.aria-current]="active() === i.key ? 'page' : null"
+         [attr.data-added]="i.added ? 'true' : null">
+        <img [src]="'fusion/' + i.icon + '.svg'" alt="" /><span>{{ i.label }}</span>
+      </a>
     }
+    <span class="fz-ver">0.0.0</span>
   </nav>
-  <router-outlet />
+  <main class="page-host">
+    <router-outlet />
+  </main>
 </div>
 
+@if (mods(); as el) {
+  <rb-pop [anchor]="el" (closed)="mods.set(null)">
+    <div class="fz-mods">
+      <h1>Switch Module</h1>
+      @for (m of modules; track m) {
+        <button type="button" class="fz-mod" (click)="switchModule(m)" [attr.aria-current]="m === module() ? 'true' : null">
+          <b>{{ m }}</b>@if (m === module()) { <span class="fz-active">Active</span> }
+        </button>
+      }
+    </div>
+  </rb-pop>
+}
+@if (langPop(); as el) {
+  <rb-pop [anchor]="el" (closed)="langPop.set(null)">
+    @for (l of languages; track l.code) {
+      <button class="rb-mi lang" role="menuitemradio" [class.on]="l.code === lang()" [attr.aria-checked]="l.code === lang()"
+              [attr.lang]="l.code" (click)="chooseLang(l.code)">
+        <span class="tick">@if (l.code === lang()) { <mat-icon>check</mat-icon> }</span>
+        <span class="grow"><b>{{ l.label }}</b>@if (l.note) { <small>{{ l.note }}</small> }</span>
+      </button>
+    }
+  </rb-pop>
+}
+@if (help(); as el) {
+  <rb-pop [anchor]="el" (closed)="help.set(null)">
+    @for (g of helpGroups; track g.title) {
+      <div class="rb-mlab">{{ g.title }}</div>
+      @for (item of g.items; track item) { <button class="rb-mi" (click)="openHelp(item)">{{ item }}</button> }
+      @if (!$last) { <div class="rb-msep"></div> }
+    }
+  </rb-pop>
+}
 @if (bell(); as el) {
   <rb-pop [anchor]="el" (closed)="closeBell()">
     <div class="rb-mlab">Notifications</div>
     @for (n of s.notes.slice(0, 8); track n.id) {
-      <button class="rb-mi" (click)="openNote(n.key)"><mat-icon>{{ n.read ? 'check' : 'notifications_none' }}</mat-icon>
+      <button class="rb-mi" (click)="openNote(n.key)"><mat-icon>{{ n.read ? 'check' : 'notifications' }}</mat-icon>
         <span class="grow">{{ n.text }}@if (n.email) {<br /><span class="muted tiny">Also emailed as a link</span>}</span><span class="r">{{ hm(n.at) }}</span></button>
-    } @empty { <div class="rb-mlab">No notifications</div> }
+    } @empty { <div class="rb-mempty">Nothing needs you right now.</div> }
   </rb-pop>
 }
 @if (who(); as el) {
   <rb-pop [anchor]="el" (closed)="who.set(null)">
-    <div class="rb-mlab">Prototype: switch who is signed in</div>
-    <button class="rb-mi" [class.on]="s.role() === 'admin'" (click)="switchTo('/it')"><mat-icon>admin_panel_settings</mat-icon>IT administrator</button>
-    <button class="rb-mi" [class.on]="s.role() === 'user'" (click)="switchTo('/reports')"><mat-icon>person</mat-icon>Billing staff</button>
+    <div class="who-row"><img src="fusion/avatar.svg" alt="" width="32" height="32" />
+      <div><b>{{ s.role() === 'admin' ? 'IT administrator' : 'Gokul M' }}</b><small>{{ s.role() === 'admin' ? 'Application Setup' : 'Billing staff' }}</small></div></div>
+    <div class="rb-msep"></div>
+    <div class="rb-mlab">Prototype: view as</div>
+    <button class="rb-mi" [class.on]="s.role() === 'user'" (click)="viewAs('/reports')"><mat-icon>person</mat-icon>Billing staff · My reports</button>
+    <button class="rb-mi" [class.on]="s.role() === 'admin'" (click)="viewAs('/it')"><mat-icon>admin_panel_settings</mat-icon>IT administrator · Report builder</button>
+    <div class="rb-msep"></div>
+    <button class="rb-mi" (click)="signOut()"><mat-icon>logout</mat-icon>Sign out</button>
   </rb-pop>
 }
 @if (s.toastMsg(); as t) {

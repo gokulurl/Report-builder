@@ -1,0 +1,231 @@
+/* =============================================================
+   MEDINOUS FUSION — DESIGN TOKENS
+   Framework-agnostic CSS custom properties.
+   Source of truth: Medinous 2026 Brand Guidelines
+   (ported from Patient-Portal-Latest / style-guide.html).
+   ============================================================= */
+
+:root {
+  /* ----------------------------------------------------------
+     1. BRAND COLORS (from brand guideline — do not alter)
+     ---------------------------------------------------------- */
+  --color-midnight:    #002e5b;  /* primary dark — headers, nav, headings */
+  --color-science:     #0066cc;  /* primary action — buttons, links, active */
+  --color-blaze:       #ff6400;  /* accent — attention, required, energy (use sparingly) */
+  --color-surface-cool:#f3f7fb;  /* cool light surface — clinical/data zones */
+  --color-surface-warm:#fff6ef;  /* warm light surface — patient/human zones */
+
+  /* ----------------------------------------------------------
+     2. EXTENDED SCALES (derived tints/shades)
+     ---------------------------------------------------------- */
+  /* Science Blue (primary) */
+  --blue-50:  #e8f1fc;
+  --blue-100: #cfe2f9;
+  --blue-200: #9cc4f2;
+  --blue-300: #5fa0e9;
+  --blue-400: #2b7fdd;
+  --blue-500: #0066cc;   /* base = Science Blue */
+  --blue-600: #0056ad;
+  --blue-700: #00448a;
+  --blue-800: #003366;
+  --blue-900: #002e5b;   /* = Midnight */
+
+  /* Blaze Orange (accent) */
+  --orange-50:  #fff1e6;
+  --orange-100: #ffddc2;
+  --orange-200: #ffbb85;
+  --orange-300: #ff9747;
+  --orange-400: #ff7d1a;
+  --orange-500: #ff6400;  /* base = Blaze */
+  --orange-600: #db5400;
+  --orange-700: #b34400;
+
+  /* Neutral / Slate (text, borders, backgrounds) */
+  --slate-0:   #ffffff;
+  --slate-25:  #fafbfc;
+  --slate-50:  #f3f7fb;   /* = cool surface */
+  --slate-100: #e9eef4;
+  --slate-200: #d8e0ea;
+  --slate-300: #c0ccda;
+  --slate-400: #94a3b5;
+  --slate-500: #6b7a8d;
+  --slate-600: #4d5b6e;
+  --slate-700: #33485c;
+  --slate-800: #1e3247;
+  --slate-900: #002e5b;   /* = midnight */
+
+  /* ----------------------------------------------------------
+     3. SEMANTIC COLORS (states)
+     ---------------------------------------------------------- */
+  --success:     #1f9d55;
+  --success-bg:  #e7f6ee;
+  --warning:     #c77700;
+  --warning-bg:  #fff4e0;
+  --danger:      #d92d20;
+  --danger-bg:   #fdeceb;
+  --info:        #0066cc;
+  --info-bg:     #e8f1fc;
+
+  /* The ink of each state, for text sitting on that state's own tint. The
+     signal colours above are tuned to be read as fills; at badge size on a
+     pale wash of themselves they land between 3.1 and 4.2 to 1, which is under
+     the floor for text. These are the same hues carried down until they pass,
+     so a status badge stays legible on a bad monitor at the end of a shift.
+       success on success-bg  4.86   (was 3.13)
+       warning on warning-bg  5.29   (was 3.18)
+       danger  on danger-bg   5.75   (was 4.23)  */
+  --success-ink: #0f7a3d;
+  --warning-ink: #955700;
+  --danger-ink:  #b42318;
+
+  /* Small white text needs a deeper ground than the signal fill gives it:
+     white on --color-blaze is 2.97, white on --success is 3.49. These carry
+     white at 5.61 and 5.40 and are used only where a solid chip holds text. */
+  --blaze-deep:   #b34400;
+  --success-deep: #157a41;
+
+  /* ----------------------------------------------------------
+     4. SEMANTIC ROLES (use these in components, not raw hex)
+     ---------------------------------------------------------- */
+  --bg-app:        var(--slate-50);
+  --bg-surface:    var(--slate-0);
+  --bg-subtle:     var(--slate-25);
+  --bg-sidebar:    var(--color-midnight);
+  --border:        var(--slate-200);
+  --border-strong: var(--slate-300);
+  --text-primary:  var(--slate-900);
+  --text-secondary:var(--slate-600);
+  --text-muted:    var(--slate-400);
+  --text-on-dark:  #ffffff;
+  --accent-required: var(--color-blaze);
+  --focus-ring:    var(--blue-300);
+
+  /* ----------------------------------------------------------
+     5. TYPOGRAPHY
+     ---------------------------------------------------------- */
+  --font-display: 'DM Sans', system-ui, sans-serif; /* headings: DM Sans; Gilroy is off for now (Gokul, 17 Nov 2026) */
+  --font-ui:      'DM Sans', system-ui, -apple-system, sans-serif; /* body/UI/data */
+
+  --fw-light: 300;
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* Type scale (rem, 16px base) tuned for dense clinical UI */
+  --text-2xs: 0.6875rem; /* 11px — dense table meta */
+  --text-xs:  0.75rem;   /* 12px — labels, captions */
+  --text-sm:  0.8125rem; /* 13px — table cells, secondary */
+  --text-base:0.875rem;  /* 14px — body / inputs (default) */
+  --text-md:  1rem;      /* 16px — emphasized body */
+  /* One size per role, so a heading's size says what kind of heading it is:
+       2xl  the screen's title
+       xl   a navigation column's own heading
+       lg   the patient — identity, not a section
+       md   a card or panel heading (h2)
+     "card titles" on lg was wrong: every .card-head h2 in the app is md. */
+  --text-lg:  1.125rem;  /* 18px — the patient's name */
+  --text-xl:  1.375rem;  /* 22px — a nav column's heading */
+  --text-2xl: 1.75rem;   /* 28px — page title */
+  --text-3xl: 2.25rem;   /* 36px — display */
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+
+  /* ----------------------------------------------------------
+     6. SPACING (4px base)
+     ---------------------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ----------------------------------------------------------
+     7. RADIUS
+     ---------------------------------------------------------- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* ----------------------------------------------------------
+     8. ELEVATION (soft, flat-friendly)
+     ---------------------------------------------------------- */
+  --shadow-xs: 0 1px 2px rgba(0, 46, 91, 0.05);
+  --shadow-sm: 0 1px 3px rgba(0, 46, 91, 0.08), 0 1px 2px rgba(0, 46, 91, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 46, 91, 0.08);
+  --shadow-lg: 0 12px 28px rgba(0, 46, 91, 0.12);
+
+  /* ----------------------------------------------------------
+     9. MOTION & LAYOUT
+     ---------------------------------------------------------- */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+
+  --control-h: 40px;   /* inputs, buttons */
+  --control-h-sm: 32px;
+}
+
+/* =============================================================
+   10. VISUAL SYSTEM — surfaces, elevation, rhythm
+   Added 27 Oct 2026, answering the 9 Oct review note that the UI
+   "feels so ChatGPT-ish… the auto-generated UI" and that we are
+   "missing creativity".
+
+   The mechanical cause of that reaction was that everything sat on
+   one plane: white cards on a pale ground, 1px hairlines, 6px radii,
+   almost no shadow, and a type range of 11-14px across ~90% of the
+   product. Three named surface levels and a wider type ramp fix it
+   without touching a single brand colour.
+   ============================================================= */
+:root {
+  /* --- Surface levels. A component states which level it is on, so
+         "is this thing above or below that thing" stops being decided
+         by whoever wrote the border. --- */
+  --level-ground:  var(--slate-50);   /* the page itself */
+  --level-raised:  #ffffff;           /* cards, panels, list columns */
+  --level-overlay: #ffffff;           /* drawers, dialogs, popovers */
+
+  /* Elevation to match. A card is lifted by shadow, not fenced by a
+     border — a border round every box is what made the old screens
+     read as a wireframe. */
+  --shadow-card:    0 1px 2px rgb(0 46 91 / .06), 0 2px 8px rgb(0 46 91 / .06);
+  --shadow-card-hi: 0 2px 4px rgb(0 46 91 / .07), 0 8px 20px rgb(0 46 91 / .10);
+  --shadow-overlay: 0 16px 40px rgb(0 46 91 / .18);
+  /* Hairline for dividing content *inside* a card. Never for enclosing it. */
+  --rule: var(--slate-100);
+
+  --radius-card: 12px;
+
+  /* --- Type ramp. The old scale topped out at 28px and was never used;
+         in practice the product ran 11-16px and read flat. These three
+         are the sizes that carry hierarchy. --- */
+  --text-hero: 2rem;        /* 32px — the one thing a screen is about */
+  --tracking-tight: -0.015em;
+  --tracking-wide:   0.04em;
+
+  /* --- Stage accents. Seven stages of one pipeline, so the tiles are
+         one neutral material with a coloured edge, not seven pastel
+         washes: a rainbow of filled tiles turns garish within a week of
+         daily use, and a small accent carries more meaning than a large
+         one. The edge-tick idea is lifted from the reference deck. --- */
+  /* Stage accents — defined, unused for now: the tile treatment they were
+     made for was withdrawn on 27 Oct. Kept because the per-stage identity is
+     still the open question. */
+  --stage-appointments: var(--color-science);
+  --stage-registration: var(--color-blaze);
+  --stage-triage:       var(--danger);
+  --stage-assessment:   #7a5af8;
+  --stage-consultation: var(--success);
+  --stage-order:        #0d9aa8;
+  --stage-billing:      var(--warning);
+}

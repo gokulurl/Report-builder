@@ -1,10 +1,11 @@
 import { Component, computed, input, output, signal } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { FormsModule } from '@angular/forms';
 import { RbStore, Schedule } from './store';
 import { MyReport, PRESETS, Period, fdate, resolveRange } from './engine';
 import { MORE, QUICK, iso } from './staff';
-import { RbDialog } from './ui';
+import { RbDialog, RbInfo } from './ui';
 
 const dmy = (s?: string) => { if (!s) return ''; const [y, m, d] = s.split('-'); return `${d}/${m}/${y}`; };
 /** Accepts 7/9/2026, 07-09-2026 or 07.09.2026 (day first, as written in the GCC). */
@@ -19,7 +20,7 @@ const parseDmy = (s: string) => {
  */
 @Component({
   selector: 'rb-period',
-  imports: [FormsModule, MatIconModule],
+  imports: [FormsModule, MatIconModule, MatTooltipModule],
   template: `
     <select class="rb-sel rb-psel" [ngModel]="value().preset" (ngModelChange)="pick($event)" aria-label="Period">
       @for (k of keys; track k) { <option [value]="k">{{ presets[k] }}</option> }
@@ -31,7 +32,7 @@ const parseDmy = (s: string) => {
         <span class="rb-dfield" [class.bad]="errKey() === k">
           <input class="rb-inp rb-dtxt" [value]="txt(k)" (change)="typed(k, $any($event.target).value)" placeholder="dd/mm/yyyy" inputmode="numeric"
                  [attr.aria-label]="(k === 'a' ? 'From' : 'To') + ' date, day month year'" [attr.aria-invalid]="errKey() === k" />
-          <button type="button" class="fx-icon-btn sm" (click)="cal(hid)" [attr.aria-label]="'Pick ' + (k === 'a' ? 'from' : 'to') + ' date'"><mat-icon>calendar_month</mat-icon></button>
+          <button matTooltip="Pick a date from the calendar" type="button" class="fx-icon-btn sm" (click)="cal(hid)" [attr.aria-label]="'Pick ' + (k === 'a' ? 'from' : 'to') + ' date'"><mat-icon>calendar_month</mat-icon></button>
           <input #hid type="date" class="rb-dhid" [value]="k === 'a' ? from() : to()" (change)="setIso(k, $any($event.target).value)" tabindex="-1" aria-hidden="true" />
         </span>
       }
@@ -72,10 +73,10 @@ export class RbPeriod {
 /** Create or change a schedule. A schedule always runs a saved report with its saved settings. */
 @Component({
   selector: 'rb-schedule',
-  imports: [FormsModule, RbDialog],
+  imports: [FormsModule, RbDialog, RbInfo],
   template: `
     <rb-dialog [title]="(existing() ? 'Change schedule: ' : 'Schedule: ') + report().name" (closed)="closed.emit()">
-      <p class="muted tiny">Runs with the report's saved period, filters and grouping. {{ presets[report().period.preset] || 'The period' }} stays relative to each run. It runs with your permissions at the time it runs.</p>
+      <p class="muted tiny">Uses the saved settings. {{ presets[report().period.preset] || 'The period' }} moves with each run. <rb-info text="Runs with the saved period, filters and grouping, and with your permissions at the time it runs." /></p>
       <div class="rb-frm">
         <label>How often<select class="rb-sel" [(ngModel)]="f.freq">@for (o of freqs; track o) { <option>{{ o }}</option> }</select></label>
         <label>Time<input class="rb-inp" type="time" [(ngModel)]="f.time" /></label>
@@ -105,7 +106,7 @@ export class ScheduleDialog {
     });
   }
   save() {
-    const deliver = ['Dashboard']; if (this.f.app) deliver.push('In-app notification'); if (this.f.email) deliver.push('Email link');
+    const deliver = ['Scheduled list']; if (this.f.app) deliver.push('In-app notification'); if (this.f.email) deliver.push('Email link');
     const o = { src: this.report().id, freq: this.f.freq, time: this.f.time, fmt: this.f.fmt, deliver, on: true };
     const x = this.existing();
     if (x) { Object.assign(x, o); this.s.bump(); } else this.s.addSchedule(o);

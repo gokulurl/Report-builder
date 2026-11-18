@@ -103,18 +103,29 @@ export const PERIOD_GROUPS: [string, string[]][] = [
 ];
 export const NFMT: Record<string, string> = { auto: 'As registered', whole: 'Whole number (1,234)', d2: '2 decimals (1,234.56)', d3: '3 decimals (1,234.567)', money: 'Currency (KD 1,234.500)', money0: 'Currency, no decimals (KD 1,235)', pct: 'Percent (56%)' };
 export const DFMT: Record<string, string> = { medium: '06 Oct 2026', wday: 'Tue, 06 Oct 2026', long: '6 October 2026', iso: '2026-10-06 (for systems)' };
-export const MODULES = ['Billing', 'Registration', 'Administration'];
+/** Fusion's modules, as Switch Module lists them. IT can build a template for any of them. */
+export const MODULES = ['Application Setup', 'Billing', 'Claims & Remittance', 'General Stores', 'IP Management', 'Laboratory',
+  'OP Nursing', 'Operation Theatre', 'Pharmacy', 'Radiology', 'Registration'];
 export const ENTITIES: Record<string, { id: string; name: string; row: string; sample: boolean }[]> = {
   Billing: [{ id: 'inv_detail', name: 'Invoice Detail', row: 'One row is a billed service line', sample: true }, { id: 'inv_header', name: 'Invoice Header', row: 'One row is an invoice', sample: false }],
   Registration: [{ id: 'pat_reg', name: 'Patient Registration', row: 'One row is a registered patient', sample: false }, { id: 'pat_visit', name: 'Patient Visit', row: 'One row is a visit', sample: false }],
-  Administration: [{ id: 'users', name: 'User Accounts', row: 'One row is a user account', sample: false }],
+  // Only Invoice Detail has sample data in the prototype; the rest are listed with the reason (PRD A2)
+  'Application Setup': [{ id: 'users', name: 'User Accounts', row: 'One row is a user account', sample: false }, { id: 'audit', name: 'Audit Log', row: 'One row is a recorded action', sample: false }],
+  'Claims & Remittance': [{ id: 'claim', name: 'Claim', row: 'One row is a submitted claim', sample: false }, { id: 'remit_line', name: 'Remittance Line', row: 'One row is a paid or rejected claim line', sample: false }],
+  'General Stores': [{ id: 'stock_move', name: 'Stock Movement', row: 'One row is an issue, receipt or transfer', sample: false }, { id: 'po_line', name: 'Purchase Order Line', row: 'One row is an ordered item', sample: false }],
+  'IP Management': [{ id: 'admission', name: 'Admission', row: 'One row is an inpatient admission', sample: false }, { id: 'bed_day', name: 'Bed Occupancy', row: 'One row is a bed on a day', sample: false }],
+  Laboratory: [{ id: 'lab_result', name: 'Lab Result', row: 'One row is a test result', sample: false }, { id: 'lab_order', name: 'Lab Order', row: 'One row is an ordered test', sample: false }],
+  'OP Nursing': [{ id: 'vitals', name: 'Vitals', row: 'One row is a recorded set of vitals', sample: false }],
+  'Operation Theatre': [{ id: 'surgery', name: 'Surgery Case', row: 'One row is a scheduled or completed surgery', sample: false }],
+  Pharmacy: [{ id: 'rx_line', name: 'Pharmacy Sale Line', row: 'One row is a dispensed item', sample: false }],
+  Radiology: [{ id: 'rad_study', name: 'Radiology Study', row: 'One row is an imaging study', sample: false }],
 };
 export const SWATCH: Record<string, { bg: string; fg: string; n: string }> = {
   gbg: { bg: '#e7f6ee', fg: '#1f7a45', n: 'Green fill' }, rbg: { bg: '#fdeceb', fg: '#b42318', n: 'Red fill' },
   abg: { bg: '#fff4e0', fg: '#9a5b00', n: 'Amber fill' }, bbg: { bg: '#e8f1fc', fg: '#00448a', n: 'Blue fill' },
   rtx: { bg: '', fg: '#d92d20', n: 'Red text' }, gtx: { bg: '', fg: '#1f9d55', n: 'Green text' },
 };
-export const PALETTE = ['#0065cb', '#1f9d55', '#c77700', '#6b4ea8', '#fe6300', '#00448a', '#5fa0e9', '#d92d20'];
+export const PALETTE = ['#0066cc', '#1f9d55', '#c77700', '#7a5af8', '#ff6400', '#00448a', '#5fa0e9', '#d92d20'];
 
 /** Data set settings, set once by Medinous per data set (not per template). */
 export const DATASETS: Record<string, { periodCol: string; noun: string; defaultPeriod: Period; maxInteractiveDays: number; actions: { id: string; label: string; single?: boolean }[] }> = {

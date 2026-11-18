@@ -1,0 +1,116 @@
+/* The Fusion shell, measured off qa.medinousfusion.com at 1440 x 900 (17 Nov 2026).
+   App bar = kendo-appbar.header-top-nav; rail = kendo-drawer (.k-drawer-item, .drawerItems).
+   Developers: this file is a replica for the prototype only. The product keeps its own shell. */
+:host {
+  --fz-blue: #0065cb; --fz-orange: #fe6300; --fz-ink: #3d3d3d; --fz-page: #f4f7ff;
+  display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+  font-family: Roboto, 'DM Sans', sans-serif;
+}
+
+/* ===== App bar: white, 52px, no border ===== */
+.fz-bar {
+  height: 52px; flex: none; position: relative; z-index: 5; box-sizing: border-box;
+  display: flex; align-items: center; gap: 8px; padding: 8px 24px 8px 0;
+  background: #fff; color: var(--fz-blue); font-size: 14px;
+}
+.fz-logo { display: flex; align-items: center; width: 136px; flex: none; img { width: 136px; height: 28.5px; display: block; } }
+.fz-hosp {
+  display: flex; align-items: center; gap: 8px; margin-inline-start: 28px; min-width: 0;
+  h4, h5 { margin: 0; font: 500 20.8px/20.8px Roboto, sans-serif; color: var(--fz-blue); white-space: nowrap; letter-spacing: 0; }
+  h4 { padding-inline-end: 6.4px; }
+}
+.fz-sep { width: 0; height: 21px; border-inline-start: 2px solid var(--fz-blue); }
+.fz-spacer { flex: 1; }
+.fz-lang {
+  width: 192px; height: 36px; flex: none; box-sizing: border-box; display: flex; align-items: center; gap: 6px;
+  padding: 0 0 0 10px; border: .667px solid rgb(61 61 61 / .5); border-radius: 4px; background: #fff;
+  font: 400 14.4px Roboto, sans-serif; color: #212529; cursor: pointer; text-align: start;
+  .grow { flex: 1; min-width: 0; }
+  .fz-x { color: #666; font-size: 16px; padding: 0 4px; }
+  .fz-caret { width: 30px; height: 100%; display: flex; align-items: center; justify-content: center;
+    &::after { content: ''; border: 5px solid transparent; border-top: 7px solid #666; margin-top: 6px; } }
+}
+.fz-icons { display: flex; align-items: center; flex: none; }
+.fz-av {
+  position: relative; width: 32px; height: 32px; margin-inline-start: 8px; padding: 0; border: none; border-radius: 50%;
+  background: var(--fz-blue); cursor: pointer; display: block;
+  img { width: 32px; height: 32px; display: block; }
+}
+.fz-count {
+  position: absolute; top: -3px; inset-inline-end: -4px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 8px; background: var(--fz-orange); color: #fff; font: 700 10px/16px Roboto, sans-serif; text-align: center;
+}
+.fz-prof {
+  display: flex; align-items: center; gap: 6px; margin-inline-start: 8px; padding: 0; border: none; background: none; cursor: pointer;
+  .fz-face { width: 32px; height: 32px; border-radius: 50%; }
+  .fz-arrow { width: 14px; height: 9px; }
+}
+
+/* ===== Body: rail + content ===== */
+.fz-body { flex: 1; min-height: 0; display: flex; border-top: 1px solid #e3e8f2; }
+
+/* Rail: 80px, white, hairline right edge. Item = icon over an 8px uppercase label.
+   Active = Fusion blue, white label and icon, 4.67px orange start edge. */
+.fz-rail {
+  width: 80px; flex: none; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden;
+  background: #fff; border-inline-end: .667px solid rgb(144 144 144 / .42);
+}
+.fz-item {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; box-sizing: border-box; min-height: 50px;
+  padding: 9px 4px 6px; border-inline-start: 4.67px solid transparent;
+  color: var(--fz-ink); text-decoration: none; text-align: center;
+  font: 400 8px/1.3 Roboto, sans-serif; text-transform: uppercase; letter-spacing: .01em;
+  img { width: 20px; height: 20px; object-fit: contain; }
+  span { display: block; margin-top: 3px; }
+  &:hover { background: #eef3fb; }
+  &.on { background: var(--fz-blue); color: #fff; border-inline-start-color: var(--fz-orange);
+    img { filter: brightness(0) invert(1); } }
+  &:focus-visible { outline: 2px solid var(--fz-orange); outline-offset: -2px; }
+}
+.fz-ver { margin-top: auto; padding: 0 0 6px 2px; font: 400 13.3px/20px Roboto, sans-serif; color: var(--fz-blue); }
+
+.page-host { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; font-family: var(--font-ui); }   /* the new UI is DM Sans; only the shell is Roboto */
+/* The routed page's own sizing lives in new-ui.scss: a component style cannot reach it. */
+
+/* ===== Switch Module: a Kendo card, 224px ===== */
+.fz-mods {
+  width: 224px; margin: -6px; padding-bottom: 4px; font-family: Roboto, sans-serif;
+  h1 { margin: 0; padding: 9px 8px 7px; font: 600 12.96px Roboto, sans-serif; color: var(--fz-ink); letter-spacing: 0; }
+}
+.fz-mod {
+  display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 48px; box-sizing: border-box;
+  padding: 8px; border: none; border-top: 1px solid #eee; background: none; cursor: pointer; text-align: start;
+  b { font: 700 12.96px Roboto, sans-serif; color: var(--fz-ink); }
+  &:hover { background: #f4f7ff; }
+}
+.fz-active { padding: 0 8px; line-height: 32px; border-radius: 16px; background: rgb(18 132 0 / .35); color: #128400; font: 700 12.96px/32px Roboto, sans-serif; }
+
+/* ===== Popover rows that the shell owns ===== */
+.rb-mi.lang {
+  align-items: flex-start;
+  .tick { width: 16px; flex: none; mat-icon { color: var(--fz-blue); font-size: 16px; width: 16px; height: 16px; } }
+  b { display: block; font-weight: 600; }
+  small { display: block; font-size: 11px; color: #6c757d; }
+}
+.who-row { display: flex; align-items: center; gap: 10px; padding: 6px 10px;
+  b { display: block; font-size: 14px; color: #212529; }
+  small { color: #6c757d; font-size: 12px; } }
+
+/* ===== Narrow windows: Fusion narrows the rail; the bar drops the department and language ===== */
+@media (max-width: 1023.98px) {
+  .fz-rail { width: 64px; }
+  .fz-item { font-size: 7px; }
+  .fz-hosp h5, .fz-sep { display: none; }
+}
+@media (max-width: 839.98px) {
+  .fz-lang { display: none; }
+  .fz-hosp h4 { font-size: 16px; }
+}
+@media (max-width: 599.98px) {
+  .fz-rail { width: 56px; }
+  .fz-item span { display: none; }
+  .fz-hosp { display: none; }
+  .fz-logo { width: 104px; padding-inline-start: 8px; img { width: 96px; height: 20px; } }
+}
+/* The toast belongs to the new screens, though it lives at the root */
+.rb-toast { font-family: var(--font-ui); }

@@ -2,7 +2,7 @@
 @use 'fusion';
 @use 'rb';
 @use 'rb-staff';
-@use 'product-skin';
+@use 'new-ui';
 
 html {
   height: 100%;
@@ -12,7 +12,7 @@ html {
         primary: mat.$blue-palette,
         tertiary: mat.$orange-palette,
       ),
-      typography: 'Roboto',
+      typography: 'DM Sans',
       density: 0,
     )
   );
@@ -68,7 +68,7 @@ body {
   color-scheme: light;
   background: var(--page);
   color: var(--ink);
-  font-family: Roboto, -apple-system, 'Segoe UI', system-ui, sans-serif;
+  font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
   font-size: 14px;
   margin: 0;
   height: 100%;
@@ -79,7 +79,4 @@ body {
   border-radius: 4px !important;
   overflow: hidden;
 }
-.mat-mdc-tooltip .mdc-tooltip__surface {
-  font-size: 12px;
-  background: #212529;
-}
+// Tooltip look: new-ui.scss section 15
