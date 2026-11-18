@@ -7,7 +7,6 @@ import { rowsFor } from './engine';
 export type Role = 'admin' | 'user';
 export interface Schedule { id: number; src: string; freq: string; time: string; deliver: string[]; fmt: string; on: boolean; last?: { at: Date; ok: boolean } }
 /** `key` is the report the note belongs to ("rep:m1" or "tpl:t3"); opening it shows that report's Results tab. */
-export interface Note { id: number; text: string; key: string; at: Date; read: boolean; email: boolean }
 export interface Folder { id: string; name: string }
 /** The open report's working copy. Saved reports keep their own values until Save. */
 export interface DocState extends Doc { kind: 'tpl' | 'rep'; id: string; tid: string; name: string; owner: string; saved: string; savedW?: string }
@@ -70,7 +69,6 @@ export class RbStore {
     { id: this.schid++, src: 'm1', freq: 'Working days (Sun to Thu)', time: '07:30', deliver: ['Scheduled list', 'In-app notification'], fmt: 'Excel', on: true, last: { at: new Date(2026, 9, 6, 7, 30), ok: true } },
     { id: this.schid++, src: 'm3', freq: 'First day of the month', time: '06:00', deliver: ['Scheduled list', 'Email link'], fmt: 'PDF', on: true, last: { at: new Date(2026, 9, 1, 6, 0), ok: false } },
   ];
-  notes: Note[] = [];
   /** Last finished run and any running job, per report key, so a run survives leaving the page. */
   runs: Record<string, Run> = {};
   jobs: Record<string, Job> = {};
@@ -146,7 +144,6 @@ export class RbStore {
       delete this.jobs[key];
       const here = this.router.url.startsWith(`/report/${d.kind}/${d.id}`);
       if (dur > 5000 || notify !== 'none' || !here) {
-        this.notes.unshift({ id: this.nid++, text: `${d.name} is ready`, key, at: new Date(), read: false, email: notify === 'email' });
         this.toast(`${d.name} is ready${notify === 'email' ? '. A link was also emailed to you' : ''}`, here ? undefined : key);
       }
       this.bump();

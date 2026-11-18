@@ -14,7 +14,7 @@ type Lang = { code: string; label: string; english: string; ready: boolean; dir:
  * The Fusion shell, kept as the live product has it: the white app bar (logo, hospital | department,
  * language, switch module, help, profile) and the module's left rail. The new screens render inside
  * the content area only. Two rail items are new: MY REPORTS in Billing and REPORT BUILDER in
- * Application Setup. The bell is the one addition to the app bar (background runs notify there).
+ * Application Setup. The app bar gains nothing: background runs report "ready" in a toast with Open, and by email.
  */
 @Component({
   selector: 'app-root',
@@ -42,12 +42,10 @@ export class App {
     return m ? m[1] : '';
   });
 
-  bell = signal<HTMLElement | null>(null);
   who = signal<HTMLElement | null>(null);
   help = signal<HTMLElement | null>(null);
   mods = signal<HTMLElement | null>(null);
   langPop = signal<HTMLElement | null>(null);
-  unread = computed(() => { this.s.rev(); return this.s.notes.filter((n) => !n.read).length; });
 
   readonly helpGroups = [
     { title: 'Learn', items: ['About Medinous', 'Implementation manual', 'Release notes'] },
@@ -110,10 +108,8 @@ export class App {
   }
   openHelp(item: string) { this.help.set(null); this.s.toast(item + ' opens in the full product'); }
   signOut() { this.who.set(null); this.s.toast('Signing out returns to the Medinous sign-in page in the full product'); }
-  closeBell() { this.bell.set(null); this.s.notes.forEach((n) => (n.read = true)); this.s.bump(); }
-  /** A note or toast belongs to a report ("rep:m1"); opening it shows that report's results. */
+  /** A toast can belong to a report ("rep:m1"); its Open shows that report's results. */
   openNote(key: string) {
-    this.bell.set(null); this.s.notes.forEach((n) => { if (n.key === key) n.read = true; });
     this.s.toastMsg.set(null); this.s.bump();
     const [kind, id] = key.split(':'); this.router.navigate(['/report', kind, id], { queryParams: { tab: 'results' } });
   }

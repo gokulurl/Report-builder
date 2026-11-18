@@ -17,13 +17,12 @@
   color-scheme: light;
   --navy: #002E5B;        /* Dark Blue: hero, callouts */
   --ink: #00366B;         /* Azure Ink: web headings */
-  --blue: #0066CC;        /* Science Blue: links, eyebrows on light */
+  --blue: #0066CC;        /* Science Blue: links */
   --orange: #FF6400;      /* Blaze Orange: payoff, key number */
   --green: #04844B;       /* success only */
   --mist: #E0EBF8;        /* dividers, light text on navy */
   --surface: #F3F7FB;     /* Light Blue: cards, sections */
   --warm: #FFF6EF;        /* Light Orange: warm surfaces */
-  --peach: #FFBC97;       /* eyebrows on navy */
   --text: #35373D;        /* body */
   --muted: #71747D;       /* captions */
   --white: #FFFFFF;
@@ -41,7 +40,7 @@ a { color: var(--blue); text-underline-offset: 3px; }
 code { font-family: var(--f-mono); font-size: .86em; background: var(--surface); color: var(--navy); padding: 1px 6px; border-radius: 6px; overflow-wrap: anywhere; }
 :focus-visible { outline: 2px solid var(--orange); outline-offset: 3px; border-radius: 6px; }
 
-/* Hero: navy glow, white logo, peach eyebrow, white statement + orange payoff, ribbon */
+/* Hero: navy glow, white logo, white statement + orange payoff, ribbon */
 .hero { position: relative; overflow: hidden; color: var(--white);
   background: radial-gradient(ellipse 80% 90% at 100% 0%, rgba(0, 102, 204, .6), rgba(0, 102, 204, 0) 70%), var(--navy); }
 .hero .wrap { padding-block: 40px 72px; position: relative; z-index: 1; }
@@ -49,13 +48,10 @@ code { font-family: var(--f-mono); font-size: .86em; background: var(--surface);
 .hero-top img { width: 150px; height: auto; display: block; }
 .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; font: 600 13px/1 var(--f-body); padding: 8px 14px; white-space: nowrap; }
 .pill.on-navy { background: rgba(255, 255, 255, .1); color: var(--mist); border: 1px solid rgba(224, 235, 248, .25); }
-.eyebrow { font: 700 14px/1 var(--f-display); letter-spacing: .14em; text-transform: uppercase; }
-.hero .eyebrow { color: var(--peach); margin-top: 64px; }
-.hero h1 { font-size: clamp(36px, 5.2vw, 58px); line-height: 1.12; font-weight: 600; margin-top: 18px; max-width: 18ch; }
+.hero h1 { font-size: clamp(36px, 5.2vw, 58px); line-height: 1.12; font-weight: 600; margin-top: 64px; max-width: 20ch; letter-spacing: -.01em; }
 .hero h1 b { display: block; font-weight: 800; color: var(--orange); }
 .rule { width: 54px; height: 3px; background: var(--orange); border-radius: 2px; margin: 26px 0 22px; }
 .hero .lede { color: var(--mist); font-size: 18px; max-width: 62ch; }
-.facts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
 .swoosh { position: absolute; right: -60px; top: -40px; width: 520px; opacity: .55; pointer-events: none; }
 .ribbon { position: relative; height: 18px; background: var(--white); }
 .ribbon::before, .ribbon::after { content: ''; position: absolute; height: 8px; width: 82%; }
@@ -65,18 +61,11 @@ code { font-family: var(--f-mono); font-size: .86em; background: var(--surface);
 /* Sections */
 main { display: grid; gap: 88px; padding-block: 72px 96px; }
 section { display: grid; gap: 22px; }
-.sh { display: grid; gap: 10px; }
-.sh .eyebrow { color: var(--blue); }
+.sh { display: grid; gap: 8px; }
 .sh h2 { color: var(--ink); font-size: clamp(28px, 3.4vw, 40px); line-height: 1.18; font-weight: 600; letter-spacing: -.01em; }
 .sh p { color: var(--text); }
 .muted { color: var(--muted); font-size: 14px; }
 
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-.card { background: var(--surface); border-radius: 16px; padding: 22px 22px 20px; display: grid; gap: 10px; align-content: start; }
-.card h3 { color: var(--ink); font-size: 20px; font-weight: 600; line-height: 1.3; }
-.card p { font-size: 15px; }
-.card .where { font: 700 12px/1 var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.card.warm { background: var(--warm); }
 .tag { display: inline-flex; align-items: center; border-radius: 999px; padding: 4px 10px; font: 600 12px/1.2 var(--f-body); white-space: nowrap; }
 .tag.blue { background: var(--mist); color: var(--ink); }
 .tag.orange { background: var(--warm); color: #C24C00; }
@@ -84,26 +73,33 @@ section { display: grid; gap: 22px; }
 .tag.red { background: #FDECEC; color: #B42318; }
 .tag.grey { background: #EEF1F5; color: var(--text); }
 
-/* Link tiles */
-.links { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
-.link { display: grid; gap: 6px; background: var(--white); border: 1px solid var(--mist); border-radius: 16px; padding: 18px 20px; text-decoration: none; color: var(--text); box-shadow: var(--shadow); transition: border-color .15s, transform .15s; }
-.link:hover { border-color: var(--blue); transform: translateY(-1px); }
-.link b { font: 600 18px/1.3 var(--f-display); color: var(--ink); }
-.link span { font-size: 14px; color: var(--muted); }
-.link .go { color: var(--blue); font-weight: 600; font-size: 14px; }
+/* Links: plain rows, hairline dividers */
+.links { display: grid; border-top: 1px solid var(--mist); }
+.links a { display: grid; grid-template-columns: minmax(180px, 260px) 1fr auto; gap: 4px 24px; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--mist); text-decoration: none; color: var(--text); }
+.links a b { font: 600 17px/1.3 var(--f-display); color: var(--ink); }
+.links a span { font-size: 14px; color: var(--muted); }
+.links a:hover b { color: var(--blue); text-decoration: underline; text-underline-offset: 3px; }
+.links a .host { color: var(--blue); font-size: 13px; font-weight: 500; white-space: nowrap; }
+@media (max-width: 640px) { .links a { grid-template-columns: 1fr; } }
 
-/* Rail mock */
-.rail { display: flex; flex-direction: column; width: 78px; flex: none; border-radius: 6px; overflow: hidden; border: 1px solid var(--mist); background: var(--white); }
-.rail span { font: 400 8px/1.25 Roboto, var(--f-body); text-transform: uppercase; color: #3d3d3d; text-align: center; padding: 7px 3px; border-inline-start: 4px solid transparent; }
-.rail span.on { background: #0065CB; color: #fff; border-inline-start-color: #FE6300; font-weight: 700; }
-.rail span.dim { color: #9aa0aa; }
-.with-rail { display: flex; gap: 16px; align-items: flex-start; }
+/* The live Fusion rail, copied from the shell's own CSS (80px, Roboto 8px caps, 4.67px orange active edge) */
+.rail { width: 80px; flex: none; display: flex; flex-direction: column; background: #fff; border: .667px solid rgb(144 144 144 / .42); border-radius: 4px; overflow: hidden; }
+.fz-item { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 50px; padding: 9px 4px 6px; border-inline-start: 4.67px solid transparent; color: #3d3d3d; text-align: center; font: 400 8px/1.3 Roboto, Arial, sans-serif; text-transform: uppercase; letter-spacing: .01em; }
+.fz-item img { width: 20px; height: 20px; object-fit: contain; }
+.fz-item span { display: block; margin-top: 3px; }
+.fz-item.on { background: #0065CB; color: #fff; border-inline-start-color: #FE6300; }
+.fz-item.on img { filter: brightness(0) invert(1); }
+.changes { display: grid; border-top: 1px solid var(--mist); }
+.change { display: grid; grid-template-columns: 80px 1fr; gap: 24px; align-items: start; padding: 18px 0; border-bottom: 1px solid var(--mist); }
+.change .new { color: var(--muted); font-size: 14px; margin-top: 8px; }
+.change h3 { font-size: 18px; font-weight: 600; color: var(--ink); line-height: 1.3; margin-bottom: 4px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.change p { font-size: 15px; }
 
 /* Flow: one lane per module; entry column on the left, branches off a spine on the right */
 .flow { display: grid; gap: 16px; }
 .lane { background: var(--surface); border-radius: 16px; padding: 20px 22px 22px; display: grid; gap: 16px; }
 .lane-h { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.lane-h .eyebrow { color: var(--blue); font-size: 13px; }
+.lane-h h3 { font-size: 18px; font-weight: 600; color: var(--ink); }
 .lane-body { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 0 0; align-items: start; }
 .entry { display: grid; justify-items: start; gap: 0; padding-inline-end: 20px; }
 .branches { display: grid; gap: 12px; border-inline-start: 2px solid #B9D3EE; padding-inline-start: 0; }
@@ -130,6 +126,10 @@ section { display: grid; gap: 22px; }
   linear-gradient(var(--ink), var(--ink)) center top / 1.5px calc(100% - 7px) no-repeat,
   conic-gradient(from 135deg at 50% 100%, var(--ink) 0 90deg, transparent 0) center bottom / 10px 8px no-repeat; }
 .arr.down span { grid-row: 1; grid-column: 2; text-align: start; margin: 0; align-self: center; }
+.route { text-decoration: none; }
+.route code { color: var(--blue); text-decoration: underline; text-decoration-color: #B9D3EE; text-underline-offset: 3px; }
+.route:hover code { text-decoration-color: currentColor; }
+.node.hub .route code { color: #fff; text-decoration-color: rgba(255,255,255,.4); }
 .note { font-size: 13px; color: var(--muted); margin-top: 10px; }
 .branches > .note { padding-inline-start: 14px; margin-top: 2px; }
 @media (max-width: 760px) {
@@ -140,34 +140,44 @@ section { display: grid; gap: 22px; }
 /* Screens */
 .shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 24px; }
 figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
-figure img { width: 100%; height: auto; display: block; border-radius: 12px; border: 1px solid var(--mist); box-shadow: var(--shadow); }
+figure img { width: 100%; height: auto; aspect-ratio: 16 / 10; display: block; border-radius: 10px; border: 1px solid var(--mist); }
 figcaption { font-size: 14px; color: var(--muted); }
 figcaption b { color: var(--ink); font-family: var(--f-display); font-weight: 600; font-size: 16px; }
-figcaption .n { font: 700 12px/1 var(--f-body); color: var(--orange); margin-inline-end: 8px; letter-spacing: .06em; }
+figcaption .n { font: 600 13px/1 var(--f-body); color: var(--muted); margin-inline-end: 6px; font-variant-numeric: tabular-nums; }
 @media (max-width: 720px) { .shots { grid-template-columns: 1fr; } }
 
 /* Tables */
 .tbl { overflow-x: auto; border-radius: 16px; border: 1px solid var(--mist); }
 table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 760px; background: var(--white); }
 th, td { text-align: start; vertical-align: top; padding: 12px 14px; border-bottom: 1px solid var(--mist); }
-th { background: var(--navy); color: var(--white); font: 600 12px/1.3 var(--f-body); letter-spacing: .06em; text-transform: uppercase; }
+th { background: var(--navy); color: var(--white); font: 600 13px/1.3 var(--f-body); }
+table { font-variant-numeric: tabular-nums; }
 tbody tr:nth-child(even) td { background: var(--surface); }
 tr:last-child td { border-bottom: none; }
 td .sec { font: 500 12px var(--f-mono); color: var(--muted); }
 td code { white-space: nowrap; }
 
-.decisions { counter-reset: d; display: grid; gap: 12px; }
-.decision { display: grid; grid-template-columns: 44px 1fr; gap: 14px; align-items: start; background: var(--surface); border-radius: 16px; padding: 18px 20px; }
-.decision::before { counter-increment: d; content: counter(d); display: grid; place-items: center; width: 40px; height: 40px; border-radius: 999px; background: var(--navy); color: var(--white); font: 700 18px/1 var(--f-display); }
-.decision b { color: var(--ink); font-family: var(--f-display); font-weight: 600; font-size: 18px; display: block; margin-bottom: 2px; }
-.decision.settled { background: #F2F8F4; }
-.decision.settled::before { content: '✓'; background: var(--green); }
+.decisions { display: grid; gap: 0; margin: 0; padding: 0 0 0 1.4em; border-top: 1px solid var(--mist); }
+.decisions li { padding: 14px 0 14px 6px; border-bottom: 1px solid var(--mist); }
+.decisions li::marker { font: 600 16px var(--f-display); color: var(--ink); }
+.decisions b { color: var(--ink); font-family: var(--f-display); font-weight: 600; font-size: 17px; display: block; margin-bottom: 2px; }
+.settled { font-size: 15px; color: var(--text); }
+.settled b { color: var(--green); }
 
 /* Footer bar */
 footer { background: var(--surface); }
 footer .wrap { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-block: 22px; font-size: 14px; color: var(--muted); }
 footer img { width: 120px; display: block; }
-@media (prefers-reduced-motion: reduce) { .link { transition: none; } }
+/* Browser surfaces */
+::selection { background: var(--mist); color: var(--navy); }
+html { scrollbar-color: #B9D3EE transparent; accent-color: var(--blue); }
+/* Developer notes: two-column definition list */
+.notes { display: grid; grid-template-columns: 220px 1fr; margin: 0; border-top: 1px solid var(--mist); }
+.notes dt, .notes dd { padding: 14px 0; border-bottom: 1px solid var(--mist); margin: 0; }
+.notes dt { font: 600 17px/1.4 var(--f-display); color: var(--ink); padding-inline-end: 20px; }
+.notes dd { font-size: 15px; }
+@media (max-width: 640px) { .notes { grid-template-columns: 1fr; } .notes dt { border-bottom: 0; padding-bottom: 0; } }
+.gap { color: #A33F00; font-weight: 500; }
 </style>
 
 <header class="hero">
@@ -177,15 +187,9 @@ footer img { width: 120px; display: block; }
       <img src="assets/logo-white.svg" alt="medinous">
       <span class="pill on-navy">Developer handoff · 18 November 2026</span>
     </div>
-    <div class="eyebrow">Report Builder · My reports</div>
-    <h1>The Report Builder, inside the Fusion shell. <b>What changes, and where it lives.</b></h1>
+    <h1>Report Builder in the Fusion shell. <b>Two new rail items. Nothing else in the shell changes.</b></h1>
     <div class="rule"></div>
-    <p class="lede">The new screens sit in today’s Fusion top bar and left rail. The shell stays as it is. Staff reach the new screens from MY REPORTS; IT reaches them from REPORT BUILDER.</p>
-    <div class="facts">
-      <span class="pill on-navy">231 screens · 5 breakpoints</span>
-      <span class="pill on-navy">Angular 21 prototype · port 4320</span>
-      <span class="pill on-navy">DM Sans content · Roboto shell</span>
-    </div>
+    <p class="lede">The new screens render inside today’s Fusion top bar and left rail, which stay as they are. Staff open them from MY REPORTS, IT from REPORT BUILDER. The prototype is Angular 21; Figma holds 231 screens across five widths.</p>
   </div>
 </header>
 <div class="ribbon" aria-hidden="true"></div>
@@ -193,69 +197,74 @@ footer img { width: 120px; display: block; }
 <main class="wrap">
 
 <section>
-  <div class="sh"><span class="eyebrow">Start here</span><h2>Where everything lives</h2></div>
+  <div class="sh"><h2>Files</h2></div>
   <div class="links">
-    <a class="link" href="https://www.figma.com/design/l98Mx1O2m5uJLgYVMmpJYF" target="_blank" rel="noopener"><b>Figma · Report Builder screens</b><span>Every state at 1440, 1280, 1024, 768 and 375, plus the Report Builder components.</span><span class="go">Open file →</span></a>
-    <a class="link" href="https://www.figma.com/design/EeB7hbB2HWxEgY5h5cQEPJ" target="_blank" rel="noopener"><b>Figma · Medinous Design System</b><span>Published library: tokens, 17 text styles, components, and the Fusion shell page.</span><span class="go">Open library →</span></a>
-    <a class="link" href="https://github.com/gokulurl/Report-builder" target="_blank" rel="noopener"><b>GitHub · Report-builder</b><span>Prototype source on <code>main</code> (also branch <code>fusion-shell-handoff</code>). Run with <code>npm start</code>.</span><span class="go">Open repo →</span></a>
+    <a href="https://www.figma.com/design/l98Mx1O2m5uJLgYVMmpJYF" target="_blank" rel="noopener"><b>Report Builder screens</b><span>Every state at 1440, 1280, 1024, 768 and 375, with the Report Builder components.</span><span class="host">Figma</span></a>
+    <a href="https://www.figma.com/design/EeB7hbB2HWxEgY5h5cQEPJ" target="_blank" rel="noopener"><b>Medinous Design System</b><span>Published library: tokens, 17 text styles, components, the Fusion shell page.</span><span class="host">Figma</span></a>
+    <a href="https://github.com/gokulurl/Report-builder" target="_blank" rel="noopener"><b>Prototype source</b><span>Branch <code>main</code>, same as <code>fusion-shell-handoff</code>. Run with <code>npm start</code>, port 4320.</span><span class="host">GitHub</span></a>
   </div>
 </section>
 
 <section>
-  <div class="sh"><span class="eyebrow">Shell</span><h2>What changes in Fusion</h2><p>Three additions. Everything else in the top bar and rail stays exactly as it is today.</p></div>
-  <div class="cards">
-    <div class="card">
-      <span class="where">Billing rail</span>
-      <div class="with-rail">
-        <div class="rail" aria-hidden="true"><span class="dim">Claim processing</span><span class="dim">Reporting</span><span class="on">My reports</span><span class="dim">Master screens</span></div>
-        <p><b>MY REPORTS</b>, right after REPORTING. Opens the staff reports home. Every module that has published templates gets the same item.</p>
+  <div class="sh"><h2>Shell changes</h2><p>Two additions, both in the left rail. The top bar stays exactly as it is today.</p></div>
+  <div class="changes">
+    <div class="change">
+      <div class="rail" aria-hidden="true">
+        <div class="fz-item"><img src="assets/fusion/op-billing.svg" alt=""><span>Collections</span></div>
+        <div class="fz-item"><img src="assets/fusion/closing.svg" alt=""><span>Closing</span></div>
+        <div class="fz-item"><img src="assets/fusion/dashboard.svg" alt=""><span>Queue</span></div>
+        <div class="fz-item"><img src="assets/fusion/insurance-desk.svg" alt=""><span>Insurance desk</span></div>
+        <div class="fz-item"><img src="assets/fusion/claim-process.svg" alt=""><span>Claim processing</span></div>
+        <div class="fz-item"><img src="assets/fusion/Reporting.svg" alt=""><span>Reporting</span></div>
+        <div class="fz-item on"><img src="assets/fusion/my-reports.svg" alt=""><span>My reports</span></div>
+        <div class="fz-item"><img src="assets/fusion/master-data.svg" alt=""><span>Master screens</span></div>
+        <div class="fz-item"><img src="assets/fusion/claim-process.svg" alt=""><span>NPHIES</span></div>
       </div>
+      <div><h3>MY REPORTS in the Billing rail</h3><p>Right after REPORTING. Opens the staff reports home. Every module with published templates gets the same item.</p></div>
     </div>
-    <div class="card">
-      <span class="where">Application Setup rail</span>
-      <div class="with-rail">
-        <div class="rail" aria-hidden="true"><span class="dim">User mgmt</span><span class="dim">Admin mgmt</span><span class="dim">Master screens</span><span class="on">Report builder</span></div>
-        <p><b>REPORT BUILDER</b>, after MASTER SCREENS. IT only. Opens the templates list.</p>
+    <div class="change">
+      <div class="rail" aria-hidden="true">
+        <div class="fz-item"><img src="assets/fusion/user-management.svg" alt=""><span>User mgmt</span></div>
+        <div class="fz-item"><img src="assets/fusion/master-data.svg" alt=""><span>Admin mgmt</span></div>
+        <div class="fz-item"><img src="assets/fusion/master-data.svg" alt=""><span>Master screens</span></div>
+        <div class="fz-item on"><img src="assets/fusion/report-builder.svg" alt=""><span>Report builder</span></div>
       </div>
-    </div>
-    <div class="card warm">
-      <span class="where">App bar · <span class="tag orange">needs sign-off</span></span>
-      <p><b>A notification bell</b> between Switch Module and Help, in the same 32px circle. Background runs and scheduled deliveries say “ready” here (PRD B9). Fusion has no bell today.</p>
+      <div><h3>REPORT BUILDER in the Application Setup rail</h3><p>After MASTER SCREENS. IT only. Opens the templates list.</p></div>
     </div>
   </div>
   <p class="muted">Kept exactly: logo, MEDINOUS QA CLINIC | GENERAL PRACTICE, language box, Switch Module, Help, profile, the 80px rail and its active style (blue fill, 4.67px orange edge). The new UI renders only inside <code>k-drawer-content</code>, full-bleed: drop that container’s 14.4px padding for these routes.</p>
 </section>
 
 <section>
-  <div class="sh"><span class="eyebrow">Flow</span><h2>How people get there</h2></div>
+  <div class="sh"><h2>Navigation flow</h2><p>Routes open the running prototype (<code>npm start</code>, port 4320).</p></div>
   <div class="flow">
     <div class="lane">
-      <div class="lane-h"><span class="eyebrow">Billing module</span><span class="muted">Staff. Every module with published templates works the same way.</span></div>
+      <div class="lane-h"><h3>Billing module</h3><span class="muted">Staff. Every module with published templates works the same way.</span></div>
       <div class="lane-body">
         <div class="entry">
           <div class="node ext"><b>Any Billing screen</b><small>e.g. Collections, or Switch Module → Billing</small></div>
           <div class="arr down"><span>rail: MY REPORTS</span></div>
-          <div class="node hub"><b>My reports</b><code>/reports</code></div>
+          <div class="node hub"><b>My reports</b><a class="route" href="http://localhost:4320/reports" target="_blank" rel="noopener"><code>/reports</code></a></div>
           <p class="note">REPORTING and its fixed reports stay, one item above.</p>
         </div>
         <div class="branches">
           <div class="br">
             <div class="arr"><span>heading drop-down</span></div>
-            <div class="node"><b>A folder</b><code>/reports?view=:id</code></div>
+            <div class="node"><b>A folder</b><a class="route" href="http://localhost:4320/reports?view=fd" target="_blank" rel="noopener"><code>/reports?view=:id</code></a></div>
             <div class="arr"><span>Add reports</span></div>
             <div class="node dlg"><b>Add reports</b><small>dialog</small></div>
           </div>
           <div class="br">
             <div class="arr"><span>click a report</span></div>
-            <div class="node"><b>Report · Settings</b><code>/report/rep/:id</code></div>
+            <div class="node"><b>Report · Settings</b><a class="route" href="http://localhost:4320/report/rep/m1" target="_blank" rel="noopener"><code>/report/rep/:id</code></a></div>
             <div class="arr"><span>Run report</span></div>
-            <div class="node focus"><b>Report · Results</b><code>?tab=results</code></div>
+            <div class="node focus"><b>Report · Results</b><a class="route" href="http://localhost:4320/report/rep/m1?tab=results" target="_blank" rel="noopener"><code>?tab=results</code></a></div>
             <div class="arr"><span>click a linked value</span></div>
             <div class="node"><b>Another report</b><small>with Back to</small></div>
           </div>
           <div class="br">
             <div class="arr"><span>Assigned reports → pick</span></div>
-            <div class="node"><b>New report, unsaved</b><code>/report/tpl/:id</code></div>
+            <div class="node"><b>New report, unsaved</b><a class="route" href="http://localhost:4320/report/tpl/t5" target="_blank" rel="noopener"><code>/report/tpl/:id</code></a></div>
             <div class="arr"><span>Save</span></div>
             <div class="node"><b>Report · Settings</b><small>now in My reports</small></div>
           </div>
@@ -267,22 +276,22 @@ footer img { width: 120px; display: block; }
               <div class="br"><div class="arr"><span>View on screen</span></div><div class="node focus"><b>Results</b><small>in a new tab</small></div></div>
             </div>
           </div>
-          <p class="note">Results also opens from the <b>bell</b> (“run is ready”) and from an <b>email link</b> after sign-in.</p>
+          <p class="note">When a background run finishes, a toast says it is ready and its <b>Open</b> goes to Results. An <b>email link</b> opens Results after sign-in.</p>
         </div>
       </div>
     </div>
     <div class="lane">
-      <div class="lane-h"><span class="eyebrow">Application Setup module</span><span class="muted">IT only.</span></div>
+      <div class="lane-h"><h3>Application Setup module</h3><span class="muted">IT only.</span></div>
       <div class="lane-body">
         <div class="entry">
           <div class="node ext"><b>Any Setup screen</b><small>e.g. User mgmt, or Switch Module → Application Setup</small></div>
           <div class="arr down"><span>rail: REPORT BUILDER</span></div>
-          <div class="node hub"><b>Templates</b><code>/it</code></div>
+          <div class="node hub"><b>Templates</b><a class="route" href="http://localhost:4320/it" target="_blank" rel="noopener"><code>/it</code></a></div>
         </div>
         <div class="branches">
           <div class="br">
             <div class="arr"><span>Edit · + New template</span></div>
-            <div class="node"><b>Builder</b><code>/it/builder/:id</code></div>
+            <div class="node"><b>Builder</b><a class="route" href="http://localhost:4320/it/builder/t1" target="_blank" rel="noopener"><code>/it/builder/:id</code></a></div>
             <div class="arr"><span>Publish to modules</span></div>
             <div class="node"><b>Templates</b><small>back to the list</small></div>
           </div>
@@ -297,93 +306,59 @@ footer img { width: 120px; display: block; }
 </section>
 
 <section>
-  <div class="sh"><span class="eyebrow">Screens</span><h2>The walk, as built</h2><p>Large window, 1440. Every other width and every dialog, drop-down and menu is in the Figma screens file.</p></div>
-  <div class="shots">
-    <figure><img src="img/01-collections.png" alt="Billing Collections in the Fusion shell, MY REPORTS in the rail below REPORTING" loading="lazy"><figcaption><span class="n">01</span><b>Any Billing screen.</b> MY REPORTS sits in the rail. Collections stands in for every existing screen.</figcaption></figure>
-    <figure><img src="img/02-reporting.png" alt="Billing Reporting with its fixed reports" loading="lazy"><figcaption><span class="n">02</span><b>REPORTING stays.</b> Its 17 fixed reports are untouched; MY REPORTS is the next item down.</figcaption></figure>
-    <figure><img src="img/03-my-reports.png" alt="My reports home" loading="lazy"><figcaption><span class="n">03</span><b>My reports.</b> Each row keeps its tags on one line; View/Edit is an icon because the row opens the report too.</figcaption></figure>
-    <figure><img src="img/04-folder-dropdown.png" alt="The All my reports heading opened as a folder picker" loading="lazy"><figcaption><span class="n">04</span><b>Folders in the heading.</b> All my reports, each folder with its count, New folder. No separate tab.</figcaption></figure>
-    <figure><img src="img/05-add-reports.png" alt="Add reports to a folder dialog" loading="lazy"><figcaption><span class="n">05</span><b>Add reports.</b> From inside a folder, after creating one, or New folder… in a row’s Move to folder.</figcaption></figure>
-    <figure><img src="img/06-report-settings.png" alt="A report on its Settings tab" loading="lazy"><figcaption><span class="n">06</span><b>Report · Settings.</b> Assigned report, period (dates beside the label) and Show as on one 34px line.</figcaption></figure>
-    <figure><img src="img/07-results.png" alt="The same report on its Results tab" loading="lazy"><figcaption><span class="n">07</span><b>Results.</b> The period leads in bold; filters and restrictions sit behind the (i). The bell and email links land here.</figcaption></figure>
-    <figure><img src="img/08-switch-module.png" alt="Switch Module card open" loading="lazy"><figcaption><span class="n">08</span><b>Switch Module.</b> Unchanged. IT picks Application Setup.</figcaption></figure>
-    <figure><img src="img/09-templates.png" alt="Application Setup with REPORT BUILDER active, templates list" loading="lazy"><figcaption><span class="n">09</span><b>REPORT BUILDER.</b> Templates list; See in My reports opens the staff view in a new tab.</figcaption></figure>
-    <figure><img src="img/10-builder.png" alt="The template builder on its Columns tab" loading="lazy"><figcaption><span class="n">10</span><b>Builder.</b> The name reads as editable; rule sentences sit behind each section’s (i).</figcaption></figure>
-  </div>
-</section>
-
-<section>
-  <div class="sh"><span class="eyebrow">Routes</span><h2>Entry points</h2></div>
+  <div class="sh"><h2>Entry points and routes</h2><p>Each route opens that screen in the prototype. Run it first with <code>npm start</code>; it serves on <code>localhost:4320</code>.</p></div>
   <div class="tbl"><table>
     <thead><tr><th>From</th><th>Action</th><th>Lands on</th><th>Prototype route</th></tr></thead>
     <tbody>
-      <tr><td>Any screen in a module</td><td>Rail: MY REPORTS</td><td>My reports, that module’s reports only</td><td><code>/reports</code></td></tr>
-      <tr><td>My reports heading</td><td>Pick a folder</td><td>That folder’s reports; heading switches folders</td><td><code>/reports?view=:id</code></td></tr>
-      <tr><td>My reports</td><td>Click a report</td><td>Report, Settings tab</td><td><code>/report/rep/:id</code></td></tr>
-      <tr><td>Assigned reports tab</td><td>Click one</td><td>New unsaved report from that template</td><td><code>/report/tpl/:id</code></td></tr>
+      <tr><td>Any screen in a module</td><td>Rail: MY REPORTS</td><td>My reports, that module’s reports only</td><td><a class="route" href="http://localhost:4320/reports" target="_blank" rel="noopener"><code>/reports</code></a></td></tr>
+      <tr><td>My reports heading</td><td>Pick a folder</td><td>That folder’s reports; heading switches folders</td><td><a class="route" href="http://localhost:4320/reports?view=fd" target="_blank" rel="noopener"><code>/reports?view=:id</code></a></td></tr>
+      <tr><td>My reports</td><td>Click a report</td><td>Report, Settings tab</td><td><a class="route" href="http://localhost:4320/report/rep/m1" target="_blank" rel="noopener"><code>/report/rep/:id</code></a></td></tr>
+      <tr><td>Assigned reports tab</td><td>Click one</td><td>New unsaved report from that template</td><td><a class="route" href="http://localhost:4320/report/tpl/t5" target="_blank" rel="noopener"><code>/report/tpl/:id</code></a></td></tr>
       <tr><td>A report row</td><td>Run</td><td>Run dialog: download, or View on screen in a new tab</td><td>dialog</td></tr>
-      <tr><td>Bell, or the email link</td><td>Open a “ready” note</td><td>That report’s Results</td><td><code>/report/rep/:id?tab=results</code></td></tr>
-      <tr><td>Results</td><td>Click a linked value</td><td>Target report filtered to the value; Back to returns</td><td><code>/report/tpl/:id</code></td></tr>
-      <tr><td>Any Application Setup screen</td><td>Rail: REPORT BUILDER</td><td>Templates</td><td><code>/it</code></td></tr>
-      <tr><td>Templates</td><td>Edit, or + New template</td><td>Builder</td><td><code>/it/builder/:id</code></td></tr>
-      <tr><td>Templates</td><td>See in My reports</td><td>Staff view, new tab</td><td><code>/reports?view=tpl</code></td></tr>
+      <tr><td>A “ready” toast, or the email link</td><td>Open</td><td>That report’s Results</td><td><a class="route" href="http://localhost:4320/report/rep/m1?tab=results" target="_blank" rel="noopener"><code>/report/rep/:id?tab=results</code></a></td></tr>
+      <tr><td>Results</td><td>Click a linked value</td><td>Target report filtered to the value; Back to returns</td><td><a class="route" href="http://localhost:4320/report/tpl/t5" target="_blank" rel="noopener"><code>/report/tpl/:id</code></a></td></tr>
+      <tr><td>Any Application Setup screen</td><td>Rail: REPORT BUILDER</td><td>Templates</td><td><a class="route" href="http://localhost:4320/it" target="_blank" rel="noopener"><code>/it</code></a></td></tr>
+      <tr><td>Templates</td><td>Edit, or + New template</td><td>Builder</td><td><a class="route" href="http://localhost:4320/it/builder/t1" target="_blank" rel="noopener"><code>/it/builder/:id</code></a></td></tr>
+      <tr><td>Templates</td><td>See in My reports</td><td>Staff view, new tab</td><td><a class="route" href="http://localhost:4320/reports?view=tpl" target="_blank" rel="noopener"><code>/reports?view=tpl</code></a></td></tr>
     </tbody>
   </table></div>
   <p class="muted">Live Fusion URLs read like <code>/reporting/NurseReportsComponent?page=nn&amp;menu=Reporting</code>; map the routes above onto that pattern, e.g. <code>/my-reports?menu=My%20Reports</code>. The Save / Don’t save / Cancel guard on an unsaved report must also fire on rail clicks and Switch Module.</p>
 </section>
 
 <section>
-  <div class="sh"><span class="eyebrow">Responsive</span><h2>Five widths, four window classes</h2></div>
+  <div class="sh"><h2>Breakpoints</h2></div>
   <div class="tbl"><table>
     <thead><tr><th>Width</th><th>Class</th><th>Fusion rail</th><th>Content</th></tr></thead>
     <tbody>
       <tr><td><b>1440</b></td><td>Large</td><td>80px, labelled</td><td>Two panes. On My reports the side list is open.</td></tr>
       <tr><td><b>1280</b></td><td>Large</td><td>80px, labelled</td><td>Two panes. On My reports the side list starts folded (it repeats the table) so rows keep one line of tags.</td></tr>
       <tr><td><b>1024</b></td><td>Expanded</td><td>80px</td><td>Settings bar groups wrap whole; builder panel and test run stack.</td></tr>
-      <tr><td><b>768</b></td><td>Medium</td><td>64px</td><td>One pane. Department name and language box hidden.</td></tr>
-      <tr><td><b>375</b></td><td>Compact</td><td>56px, icons only</td><td>One pane; hospital name hidden; tables scroll inside their card.</td></tr>
+      <tr><td><b>768</b></td><td>Medium</td><td>64px</td><td>One pane. Department name hidden. <span class="gap">Gap: no language box, no New template.</span></td></tr>
+      <tr><td><b>375</b></td><td>Compact</td><td>56px, icons only</td><td>One pane; hospital name hidden; tables scroll inside their card. <span class="gap">Same two gaps.</span></td></tr>
     </tbody>
   </table></div>
-  <div class="cards">
-    <div class="card warm"><span class="where">Gap below 840px</span><h3>No language switch</h3><p>The language box hides at 768 and 375, and nothing else changes language.</p></div>
-    <div class="card warm"><span class="where">Gap below 840px</span><h3>No way to create a template</h3><p>“New template” sits in the tab bar’s end slot, which hides at 768 and 375.</p></div>
-  </div>
+  <p class="muted">Below 840px the language box hides, and “New template” sits in the tab bar’s end slot, which also hides. Nothing else changes the language or creates a template there.</p>
 </section>
 
 <section>
-  <div class="sh"><span class="eyebrow">Build</span><h2>Notes for developers</h2></div>
-  <div class="cards">
-    <div class="card"><h3>Access</h3><p>MY REPORTS shows in a module when the user can access that module; it lists that module’s templates and the user’s own reports. REPORT BUILDER needs the IT permission; IT also use MY REPORTS by switching module. Restricted columns, export and scheduling follow existing HMS permissions.</p></div>
-    <div class="card"><h3>Shell and content styles</h3><p>Shell: Roboto, <code>#0065CB</code>, <code>#FE6300</code>, <code>#F4F7FF</code>, unchanged. Content: the new UI in DM Sans only (Gilroy is off), from the Design System tokens. Scope the new CSS under the page wrapper so nothing leaks into the shell.</p></div>
-    <div class="card"><h3>Icons</h3><p>Content icons are Heroicons outline drawn as CSS masks (<code>src/styles/_hero-icons.scss</code>, generated by <code>tools/gen-hero-icons.mjs</code>). Shell icons are Fusion’s own <code>assets/svg</code>; the two new rail icons are in <code>public/fusion/</code>.</p></div>
-    <div class="card"><h3>Where it lives in the repo</h3><p><code>src/app/fusion-nav.ts</code> the rails · <code>src/app/app.html</code> a shell replica (don’t ship it) · <code>src/app/fusion-screen.ts</code> stand-ins · <code>src/app/rb/*</code> the screens to build · <code>src/new-ui.scss</code> the styles.</p></div>
-  </div>
+  <div class="sh"><h2>Developer notes</h2></div>
+  <dl class="notes">
+    <dt>Access</dt><dd>MY REPORTS shows in a module when the user can access that module; it lists that module’s templates and the user’s own reports. REPORT BUILDER needs the IT permission; IT also use MY REPORTS by switching module. Restricted columns, export and scheduling follow existing HMS permissions.</dd>
+    <dt>Shell and content styles</dt><dd>Shell: Roboto, <code>#0065CB</code>, <code>#FE6300</code>, <code>#F4F7FF</code>, unchanged. Content: the new UI in DM Sans only (Gilroy is off), from the Design System tokens. Scope the new CSS under the page wrapper so nothing leaks into the shell.</dd>
+    <dt>Icons</dt><dd>Content icons are Heroicons outline drawn as CSS masks (<code>src/styles/_hero-icons.scss</code>, generated by <code>tools/gen-hero-icons.mjs</code>). Shell icons are Fusion’s own <code>assets/svg</code>; the two new rail icons are in <code>public/fusion/</code>.</dd>
+    <dt>Where it lives in the repo</dt><dd><code>src/app/fusion-nav.ts</code> the rails · <code>src/app/app.html</code> a shell replica (don’t ship it) · <code>src/app/fusion-screen.ts</code> stand-ins · <code>src/app/rb/*</code> the screens to build · <code>src/new-ui.scss</code> the styles.</dd>
+  </dl>
 </section>
 
 <section>
-  <div class="sh"><span class="eyebrow">Review</span><h2>Design review with Shrunkal, 17 November</h2></div>
-  <div class="tbl"><table>
-    <thead><tr><th style="width:38%">Feedback</th><th>Change made</th></tr></thead>
-    <tbody>
-      <tr><td>“Folders” in the side panel read as plain text.</td><td>The <b>All my reports</b> heading is now a drop-down: All my reports, each folder with its count, New folder. Inside a folder, <b>Add reports</b> opens a checklist; creating a folder opens it straight away; a row’s Move to folder ends with <b>New folder…</b>.</td></tr>
-      <tr><td>Long text doesn’t look good; put it in tooltips.</td><td>Explanations sit behind (i) tooltips, including each My reports heading and each builder section. Warnings and next steps stay visible.</td></tr>
-      <tr><td>Results: remove Change; the dates matter most.</td><td>Change is removed. The period leads the header in bold; run time and validity follow, quieter.</td></tr>
-      <tr><td>Builder: “Untitled report” doesn’t look editable.</td><td>The name has a pencil and a dashed underline; a new “Untitled…” name is selected on click.</td></tr>
-      <tr><td>The whole system should move at once, to avoid rework.</td><td>Noted for leadership; this handoff follows the agreed gradual path inside the Fusion shell.</td></tr>
-    </tbody>
-  </table></div>
-  <p class="muted">Developer contact named on the call: Narendran.</p>
-</section>
-
-<section>
-  <div class="sh"><span class="eyebrow">PRD</span><h2>Cross-check against the PRD</h2><p>Checked against <i>MedinousReportBuilder-PRD (002)</i>. Most of Parts A and B are in the prototype; these rows do not line up.</p></div>
+  <div class="sh"><h2>PRD cross-check</h2><p>Checked against <i>MedinousReportBuilder-PRD (002)</i>. Most of Parts A and B are in the prototype; these rows do not line up.</p></div>
   <div class="tbl"><table>
     <thead><tr><th style="width:120px">Status</th><th style="width:90px">PRD</th><th>PRD says</th><th>Prototype or decision</th></tr></thead>
     <tbody>
       <tr><td><span class="tag blue">Update PRD</span></td><td class="sec">§1, §3, B</td><td>The staff side is the “Dashboard”, opened from a Dashboard item in each module.</td><td>Rail item is <b>MY REPORTS</b>; copy says “See in My reports” and “Scheduled list”.</td></tr>
       <tr><td><span class="tag blue">Update PRD</span></td><td class="sec">B2</td><td>A new single-row header in a distinct colour with the module name.</td><td>Superseded: the Fusion app bar stays as it is; the rail shows where you are.</td></tr>
       <tr><td><span class="tag blue">Update PRD</span></td><td class="sec">B1</td><td>Folders: New folder, Rename, Delete, Move to folder. Nothing fills a new folder.</td><td>Added Add reports, the checklist on create, and New folder… in Move to folder. A report lives in one folder.</td></tr>
-      <tr><td><span class="tag orange">Decide</span></td><td class="sec">B9, B9.1</td><td>Background runs notify “under the bell”.</td><td>Fusion has no bell; the prototype adds one.</td></tr>
+      <tr><td><span class="tag blue">Update PRD</span></td><td class="sec">B9, B9.1</td><td>Background runs notify “under the bell”.</td><td>No bell: Fusion has none and none is added. A toast with Open says the run is ready; the email link stays.</td></tr>
       <tr><td><span class="tag orange">Decide</span></td><td class="sec">B3</td><td>New report opens with no template chosen; Run and Save disabled.</td><td>Prototype opens on the last assigned report used.</td></tr>
       <tr><td><span class="tag red">Not built</span></td><td class="sec">A7</td><td>Operation “Percent difference”.</td><td>Only “Percent of”.</td></tr>
       <tr><td><span class="tag red">Not built</span></td><td class="sec">A8</td><td>Print fit warning while building.</td><td>Orientation can be chosen; no fit warning.</td></tr>
@@ -398,14 +373,13 @@ footer img { width: 120px; display: block; }
 </section>
 
 <section>
-  <div class="sh"><span class="eyebrow">Open</span><h2>Decisions before build</h2></div>
-  <div class="decisions">
-    <div class="decision"><div><b>The bell</b>Add it to the Fusion app bar, or route background-run notices through something that already exists.</div></div>
-    <div class="decision"><div><b>Which modules get MY REPORTS first</b>Billing only for release one, or every module with a published template.</div></div>
-    <div class="decision"><div><b>New report start state (B3)</b>Empty with a template picker, or the last template used.</div></div>
-    <div class="decision"><div><b>Language and New template below 840px</b>Keep them desk-only, or give each a place on tablet and phone.</div></div>
-    <div class="decision settled"><div><b>Fonts during migration — settled</b>The content is DM Sans only beside the Roboto shell; Gilroy is off in the product.</div></div>
-  </div>
+  <div class="sh"><h2>Decisions before build</h2></div>
+  <ol class="decisions">
+    <li><b>Which modules get MY REPORTS first</b>Billing only for release one, or every module with a published template.</li>
+    <li><b>New report start state (B3)</b>Empty with a template picker, or the last template used.</li>
+    <li><b>Language and New template below 840px</b>Keep them desk-only, or give each a place on tablet and phone.</li>
+  </ol>
+  <p class="settled"><b>Settled:</b> the content uses DM Sans only, beside the Roboto shell. Gilroy is off in the product.</p>
 </section>
 
 </main>

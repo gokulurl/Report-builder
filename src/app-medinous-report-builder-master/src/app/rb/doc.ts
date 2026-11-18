@@ -533,7 +533,12 @@ export class RbDoc implements OnDestroy {
   }
   download(ext: string) {
     const r = this.run(); const t = this.tpl(); const name = this.doc().name;
-    if (t.heavy) { this.s.toast(`${name} is being prepared in the background. You'll be notified when the ${ext.toUpperCase()} is ready`); return; }
+    if (t.heavy) {
+      this.s.toast(`${name} is being prepared in the background. You'll be notified when the ${ext.toUpperCase()} is ready`);
+      const key = this.s.keyOf(this.doc());
+      setTimeout(() => this.s.toast(`${name} (${ext.toUpperCase()}) is ready to download`, key), 6000);
+      return;
+    }
     this.s.toast(`Downloaded ${name}.${ext}${r ? ', ' + r.rows.length.toLocaleString() + ' lines' : ''}`);
   }
   addClause(field: string) {

@@ -133,7 +133,8 @@ export class RunDialog {
     this.closed.emit();
     if (t.heavy) {
       this.s.toast(`${name} is being prepared in the background. You will be notified when the ${ext.toUpperCase()} is ready`);
-      setTimeout(() => { this.s.notes.unshift({ id: Date.now(), text: `${name} (${ext.toUpperCase()}) is ready to download`, key: r ? 'rep:' + r.id : 'tpl:' + t.id, at: new Date(), read: false, email: false }); this.s.bump(); }, 6000);
+      const key = r ? 'rep:' + r.id : 'tpl:' + t.id;
+      setTimeout(() => this.s.toast(`${name} (${ext.toUpperCase()}) is ready to download`, key), 6000);
     } else this.s.toast(`Downloaded ${name}.${ext}`);
     this.s.bump();
   }

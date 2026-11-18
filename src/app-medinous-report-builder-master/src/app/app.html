@@ -12,12 +12,6 @@
     <button type="button" class="fz-av" (click)="mods.set($any($event.currentTarget))" aria-haspopup="menu" aria-label="Switch module" matTooltip="Switch module">
       <img src="fusion/switch-module-more.svg" alt="" />
     </button>
-    <!-- Added to the app bar: background runs and scheduled deliveries notify here (PRD B9) -->
-    <button type="button" class="fz-av" (click)="bell.set($any($event.currentTarget))" aria-haspopup="menu"
-            [attr.aria-label]="unread() ? unread() + ' new notifications' : 'Notifications'" matTooltip="Notifications">
-      <img src="fusion/bell.svg" alt="" />
-      @if (unread()) { <span class="fz-count">{{ unread() }}</span> }
-    </button>
     <button type="button" class="fz-av" (click)="help.set($any($event.currentTarget))" aria-haspopup="menu" aria-label="Help" matTooltip="Help">
       <img src="fusion/help.svg" alt="" />
     </button>
@@ -72,15 +66,6 @@
       @for (item of g.items; track item) { <button class="rb-mi" (click)="openHelp(item)">{{ item }}</button> }
       @if (!$last) { <div class="rb-msep"></div> }
     }
-  </rb-pop>
-}
-@if (bell(); as el) {
-  <rb-pop [anchor]="el" (closed)="closeBell()">
-    <div class="rb-mlab">Notifications</div>
-    @for (n of s.notes.slice(0, 8); track n.id) {
-      <button class="rb-mi" (click)="openNote(n.key)"><mat-icon>{{ n.read ? 'check' : 'notifications' }}</mat-icon>
-        <span class="grow">{{ n.text }}@if (n.email) {<br /><span class="muted tiny">Also emailed as a link</span>}</span><span class="r">{{ hm(n.at) }}</span></button>
-    } @empty { <div class="rb-mempty">Nothing needs you right now.</div> }
   </rb-pop>
 }
 @if (who(); as el) {
