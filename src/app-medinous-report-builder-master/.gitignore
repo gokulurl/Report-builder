@@ -45,3 +45,6 @@ Thumbs.db
 
 # Licensed font files (Gilroy): kept locally, not redistributed in this public repo
 /public/fonts/
+
+# Licensed Gilroy (Fontspring desktop EULA) - keep out of the public repo
+/docs/handoff/fonts/
